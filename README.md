@@ -43,13 +43,15 @@ npx tauri build
 
 ## Controls & Features
 
-- **Left-Click on Cat**: Toggle between **Sleeping** (`off`) and **Staying Awake** (`indefinite`).
+- **Left-Click on Cat**: Toggle between **Sleeping** (`off`) and **Staying Awake** (`indefinite`) with a synthesized wake-up meow and speech bubble.
+- **Hover on `Track` Badge**: Select an AI coding agent (**Claude**, **Codex**, **Antigravity**, or **Cursor**) to automatically enter **Working** mode while the agent runs and chirp a `<Agent> done! Meow!` notification when the turn completes.
 - **Right-Click on Cat (or System Tray / Menu Bar Icon)**:
-  - **Stay Awake**: `Indefinite` / `30 Minutes` / `1 Hour` / `2 Hours` / `Off (Allow Sleep)`
+  - **Stay Awake**: `Indefinite` / `Until Agent Done` / `30 Minutes` / `1 Hour` / `2 Hours` / `Off (Allow Sleep)`
   - **Position & Pin**:
     - `Unpin & Move`: Drag the cat anywhere on your screen.
     - `Pin Here (Lock)`: Lock the cat at its current custom screen coordinates (also available via the one-click **`Pin Here`** badge while in Free Drag mode).
     - `Bottom Right` / `Bottom Left`: Snap above the taskbar/dock corners.
+  - **Sound**: `Mute Meow` toggle and `Vol` (`0%–100%`) slider.
   - **Always on Top**: Keep the cat floating above all windows (enabled by default).
   - **Launch on Startup**: Automatically start Catffeine when you log into Windows, macOS, or Linux.
   - **Hide / Show Cat**: Hide the desktop window into the Windows System Tray / macOS Menu Bar. Left-click the tray/menu-bar cat icon (or click `Show Cat`) to unhide anytime.
