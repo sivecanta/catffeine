@@ -6,13 +6,20 @@
 //!   files (main conversation + any subagents) plus `.system_generated/tasks/*.log` files.
 //! - **Cursor**: Inspects ALL recently active `~/.cursor/projects/*/agent-transcripts/**/*.jsonl` files
 //!   (both the parent conversation AND all `subagents/*.jsonl`).
-//!   When a Cursor parent agent spawns subagents (`T1`, `T2`, `T3`), individual subagents write
-//!   `{"type":"turn_ended"}` as they finish, while the **parent** transcript (`<id>/<id>.jsonl`) and
-//!   remaining subagents do NOT have `{"type":"turn_ended"}` until the entire multi-agent job is done!
-//!   By checking whether **any** recent `.jsonl` transcript is still open (missing `turn_ended`),
-//!   Cursor stays `Working` across all subagent completions until the parent turn itself ends!
-//! - **Claude (`Claude Code`)**: Inspects ALL recent `~/.claude/projects/**/*.jsonl` files across native + WSL homes.
-//! - **Codex (`OpenAI Codex CLI`)**: Inspects `~/.codex` session logs across native + WSL homes.
+//!   Cursor writes `{"type":"turn_ended","status":"..."}` ONLY when a transcript's turn has finished.
+//! - **Claude (`Claude Code`)**: Inspects BOTH:
+//!   1. All recent `~/.claude/projects/*/*.jsonl` main session transcripts, scanning backwards to find
+//!      the latest conversational event (`"type":"user"`, `"type":"assistant"`, `"type":"api-request"`).
+//!      Claude Code appends housekeeping entries (`"cost-state"`, `"last-prompt"`, `"ai-title"`, `"mode"`,
+//!      `"atis-latch"`, `"attachment"`) during and after turns — so looking only at the very last line
+//!      would misclassify a mid-turn `"cost-state"` or `"attachment"`! A main session is only idle when
+//!      its last conversational step is an `"assistant"` message with `"stop_reason":"end_turn"` (or
+//!      `"stop_sequence"`) and no subsequent `"user"` / `"api-request"` / `"tool_use"` step.
+//!   2. All recent `~/.claude/projects/*/subagents/*.meta.json` files: Claude Code writes
+//!      `"finished":false` while a subagent is running and updates it to `"finished":true` when done!
+//! - **Codex (`OpenAI Codex`)**: Inspects `~/.codex/sessions/**/*.jsonl` (checking for `"turn.completed"` /
+//!   `"task_complete"`), active `.codex/thread-writer-locks`, `.codex/process_manager`, and active `codex`
+//!   processes — while ignoring background idle telemetry (`logs_2.sqlite` / `models_cache.json`).
 
 use std::path::{Path, PathBuf};
 use std::time::{Duration, SystemTime};
@@ -62,8 +69,6 @@ pub fn is_antigravity_transcript_busy(tail_text: &str, age: Duration) -> bool {
         return false;
     };
 
-    // Check if any recent step in the tail launched a background task ("status":"RUNNING")
-    // that has not yet been closed by a subsequent SYSTEM_MESSAGE ("Task id \"...\" finished").
     let mut pending_running_tasks: Vec<&str> = Vec::new();
     for &line in &lines {
         if line.contains(r#""status":"RUNNING""#) || line.contains(r#""status": "RUNNING""#) {
@@ -111,11 +116,6 @@ fn extract_running_task_id(line: &str) -> Option<&str> {
 }
 
 /// Pure classifier for the last line of a Cursor `agent-transcripts/**/*.jsonl` file.
-///
-/// Cursor writes `{"type":"turn_ended","status":"success"}` ONLY when a transcript's turn has
-/// completely finished. When a parent agent spawns subagents (`T1`, `T2`, `T3`), the parent
-/// transcript remains on `{"role":"assistant",...}` (without `turn_ended`) for up to 30+ minutes
-/// while the subagents execute!
 pub fn is_cursor_transcript_busy(last_line: &str, age: Duration) -> bool {
     if age > Duration::from_secs(3600) {
         return false;
@@ -130,10 +130,7 @@ pub fn is_cursor_transcript_busy(last_line: &str, age: Duration) -> bool {
     true
 }
 
-/// Pure classifier for a collection of Cursor transcript `(last_line, age)` pairs
-/// (e.g. parent conversation + spawned subagents).
-///
-/// Returns `true` if **any** transcript in the active session has not yet written `"turn_ended"`.
+/// Pure classifier for a collection of Cursor transcript `(last_line, age)` pairs.
 pub fn is_any_cursor_transcript_busy<'a, I>(transcripts: I) -> bool
 where
     I: IntoIterator<Item = (&'a str, Duration)>,
@@ -143,27 +140,107 @@ where
         .any(|(last_line, age)| is_cursor_transcript_busy(last_line, age))
 }
 
-/// Pure classifier for the last line of a Claude Code session `.jsonl` file.
-pub fn is_claude_transcript_busy(last_line: &str, age: Duration) -> bool {
+/// Pure classifier for the tail of a Claude Code main session `.jsonl` file.
+///
+/// Why we scan the tail instead of only the last line:
+/// Claude Code frequently writes non-conversational metadata lines (`"type":"cost-state"`,
+/// `"type":"last-prompt"`, `"type":"ai-title"`, `"type":"mode"`, `"type":"atis-latch"`,
+/// `"type":"attachment"`, `"type":"bridge-session"`, `"type":"file-history-snapshot"`) both
+/// in the middle of a turn (right after `"api-request"`) and after `"end_turn"`.
+///
+/// By scanning backwards from the end of the tail for the most recent conversational event:
+/// - If we hit `"subtype":"turn_duration"` or `"subtype":"away_summary"`, or an `"assistant"`
+///   message with `"stop_reason":"end_turn"` / `"stop_sequence"`, the turn is finished!
+/// - If we hit `"stop_reason":"tool_use"`, `"type":"user"`, `"type":"api-request"`, or
+///   `"type":"api-request-blob"`, Claude is still actively working on the turn!
+pub fn is_claude_transcript_busy(tail_text: &str, age: Duration) -> bool {
     if age > Duration::from_secs(1800) {
         return false;
     }
-    if age <= Duration::from_secs(5) {
+    if age <= Duration::from_secs(4) {
         return true;
     }
-    let trimmed = last_line.trim();
+
+    for raw_line in tail_text.lines().rev() {
+        let line = raw_line.trim();
+        if line.is_empty() {
+            continue;
+        }
+
+        // Explicit turn completion markers in Claude Code:
+        if line.contains(r#""subtype":"turn_duration""#)
+            || line.contains(r#""subtype": "turn_duration""#)
+            || line.contains(r#""type":"turn_ended""#)
+            || line.contains(r#""stop_reason":"end_turn""#)
+            || line.contains(r#""stop_reason": "end_turn""#)
+            || line.contains(r#""stop_reason":"stop_sequence""#)
+        {
+            return false;
+        }
+
+        // Explicit mid-turn markers (waiting on API response or tool execution):
+        if line.contains(r#""stop_reason":"tool_use""#)
+            || line.contains(r#""stop_reason": "tool_use""#)
+            || line.contains(r#""type":"api-request""#)
+            || line.contains(r#""type":"api-request-blob""#)
+            || line.contains(r#""type":"user""#)
+            || line.contains(r#""type": "user""#)
+            || line.contains(r#""type":"tool_result""#)
+        {
+            return true;
+        }
+        // Ignore housekeeping lines ("cost-state", "last-prompt", "ai-title", "mode", "attachment", etc.)
+        // and continue scanning backwards!
+    }
+
+    false
+}
+
+/// Pure classifier for a Claude Code subagent `.meta.json` file.
+///
+/// Claude Code creates `subagents/agent-<id>.meta.json` for every spawned subagent and sets
+/// `"finished":true` only when that subagent finishes!
+pub fn is_claude_subagent_meta_busy(meta_json: &str, age: Duration) -> bool {
+    if age > Duration::from_secs(3600) {
+        return false;
+    }
+    let trimmed = meta_json.trim();
     if trimmed.is_empty() {
         return false;
     }
-    if trimmed.contains(r#""type":"turn_ended""#) {
+    if trimmed.contains(r#""finished":true"#) || trimmed.contains(r#""finished": true"#) {
         return false;
     }
-    let is_assistant =
-        trimmed.contains(r#""type":"assistant""#) || trimmed.contains(r#""type": "assistant""#);
-    if !is_assistant {
+    true
+}
+
+/// Pure classifier for the tail of a Codex `.jsonl` session / rollout file.
+///
+/// Codex streams JSONL events (`thread.started`, `turn.started`, `item.started`, `item.completed`)
+/// and writes `"type":"turn.completed"` or `"type":"task_complete"` when the turn finishes.
+pub fn is_codex_transcript_busy(tail_text: &str, age: Duration) -> bool {
+    if age > Duration::from_secs(1800) {
+        return false;
+    }
+    if age <= Duration::from_secs(4) {
         return true;
     }
-    trimmed.contains(r#""type":"tool_use""#) || trimmed.contains(r#""type": "tool_use""#)
+    for raw_line in tail_text.lines().rev() {
+        let line = raw_line.trim();
+        if line.is_empty() {
+            continue;
+        }
+        if line.contains(r#""type":"turn.completed""#)
+            || line.contains(r#""type": "turn.completed""#)
+            || line.contains(r#""type":"turn.failed""#)
+            || line.contains(r#""type":"task_complete""#)
+            || line.contains(r#""type":"turn_aborted""#)
+        {
+            return false;
+        }
+        return true;
+    }
+    false
 }
 
 /// Checks whether the currently selected [`TrackedAgent`] is actively working right now.
@@ -328,7 +405,6 @@ fn check_cursor_busy() -> bool {
         for project in projects.flatten() {
             let transcripts_dir = project.path().join("agent-transcripts");
             let mut recent_files = Vec::new();
-            // Depth 4 covers both `agent-transcripts/<id>/<id>.jsonl` AND `agent-transcripts/<id>/subagents/<subid>.jsonl`!
             collect_recent_files_under(
                 &transcripts_dir,
                 4,
@@ -359,13 +435,29 @@ fn check_claude_busy() -> bool {
             &projects_dir,
             4,
             now,
-            Duration::from_secs(1800),
+            Duration::from_secs(3600),
             &mut recent_files,
         );
         for (path, age) in recent_files {
-            if path.extension().is_some_and(|e| e == "jsonl") {
-                if let Some(last_line) = read_last_non_empty_line(&path) {
-                    if is_claude_transcript_busy(&last_line, age) {
+            let file_name = path.file_name().and_then(|n| n.to_str()).unwrap_or("");
+            let is_in_subagents = path
+                .parent()
+                .and_then(|p| p.file_name())
+                .is_some_and(|n| n == "subagents");
+
+            if is_in_subagents {
+                // For Claude Code subagents, check `agent-*.meta.json` which has `"finished": true/false`!
+                if file_name.ends_with(".meta.json") {
+                    if let Ok(meta_text) = std::fs::read_to_string(&path) {
+                        if is_claude_subagent_meta_busy(&meta_text, age) {
+                            return true;
+                        }
+                    }
+                }
+            } else if file_name.ends_with(".jsonl") {
+                // Main Claude Code session JSONL: scan the tail backwards past housekeeping records
+                if let Some(tail_text) = read_tail_text(&path, 32_768) {
+                    if is_claude_transcript_busy(&tail_text, age) {
                         return true;
                     }
                 }
@@ -379,9 +471,43 @@ fn check_codex_busy() -> bool {
     let now = SystemTime::now();
     for home in candidate_home_dirs() {
         let codex_dir = home.join(".codex");
-        if let Some((_path, age)) = most_recent_file_age_under(&codex_dir, 4, now) {
-            if age <= Duration::from_secs(15) {
+        if !codex_dir.exists() {
+            continue;
+        }
+
+        // 1. Check active thread writer locks (`~/.codex/thread-writer-locks`)
+        let locks_dir = codex_dir.join("thread-writer-locks");
+        if let Some((_lock, age)) = most_recent_file_age_under(&locks_dir, 2, now) {
+            if age <= Duration::from_secs(120) {
                 return true;
+            }
+        }
+
+        // 2. Check active process manager entries (`~/.codex/process_manager`)
+        let proc_dir = codex_dir.join("process_manager");
+        if let Some((_proc_file, age)) = most_recent_file_age_under(&proc_dir, 2, now) {
+            if age <= Duration::from_secs(60) {
+                return true;
+            }
+        }
+
+        // 3. Check `~/.codex/sessions/**/*.jsonl` rollout files (uncompressed active sessions)
+        let sessions_dir = codex_dir.join("sessions");
+        let mut session_files = Vec::new();
+        collect_recent_files_under(
+            &sessions_dir,
+            5,
+            now,
+            Duration::from_secs(1800),
+            &mut session_files,
+        );
+        for (path, age) in session_files {
+            if path.extension().is_some_and(|e| e == "jsonl") {
+                if let Some(tail_text) = read_tail_text(&path, 32_768) {
+                    if is_codex_transcript_busy(&tail_text, age) {
+                        return true;
+                    }
+                }
             }
         }
     }
@@ -448,29 +574,23 @@ mod tests {
 
     #[test]
     fn cursor_stays_busy_when_subagent_completes_but_parent_or_other_subagent_is_running() {
-        // Parent transcript is waiting on subagents (no turn_ended yet, modified 11 mins ago)
         let parent_last_line =
             r#"{"role":"assistant","message":{"content":[{"type":"tool_use","name":"Task"}]}}"#;
-        // Subagent T1 just finished and wrote turn_ended (modified 1 sec ago)
         let finished_subagent_t1 = r#"{"type":"turn_ended","status":"success"}"#;
-        // Subagent T2 is still running tests (modified 2 secs ago)
         let running_subagent_t2 =
             r#"{"role":"assistant","message":{"content":[{"type":"tool_use","name":"Shell"}]}}"#;
 
-        // Even though T1 finished most recently, checking ALL transcripts keeps Cursor busy!
         assert!(is_any_cursor_transcript_busy([
             (finished_subagent_t1, Duration::from_secs(1)),
             (running_subagent_t2, Duration::from_secs(2)),
             (parent_last_line, Duration::from_secs(660)),
         ]));
 
-        // Even if T1 and T2 both finished, parent is still open (hasn't written turn_ended yet):
         assert!(is_any_cursor_transcript_busy([
             (finished_subagent_t1, Duration::from_secs(5)),
             (parent_last_line, Duration::from_secs(700)),
         ]));
 
-        // Only when BOTH subagents AND the parent transcript have written turn_ended is Cursor done!
         let finished_parent = r#"{"type":"turn_ended","status":"success"}"#;
         assert!(!is_any_cursor_transcript_busy([
             (finished_subagent_t1, Duration::from_secs(15)),
@@ -479,19 +599,71 @@ mod tests {
     }
 
     #[test]
-    fn claude_transcript_busy_when_user_or_tool_use_is_latest() {
-        let user_msg = r#"{"type":"user","message":{"content":"fix bug"}}"#;
-        assert!(is_claude_transcript_busy(user_msg, Duration::from_secs(15)));
-
-        let tool_result_msg = r#"{"type":"tool_result","content":"ok"}"#;
+    fn claude_scans_past_housekeeping_lines_and_checks_subagent_meta() {
+        // Mid-turn: api-request followed by housekeeping lines ("last-prompt", "ai-title", "attachment")
+        let mid_turn_with_housekeeping = concat!(
+            r#"{"type":"user","message":{"content":[{"type":"tool_result"}]}}"#,
+            "\n",
+            r#"{"type":"api-request","data":{}}"#,
+            "\n",
+            r#"{"type":"last-prompt","text":"fix bug"}"#,
+            "\n",
+            r#"{"type":"ai-title","title":"Fixing bug"}"#,
+            "\n",
+            r#"{"type":"attachment","data":{}}"#
+        );
         assert!(is_claude_transcript_busy(
-            tool_result_msg,
-            Duration::from_secs(20)
+            mid_turn_with_housekeeping,
+            Duration::from_secs(25)
         ));
 
-        let assistant_done = r#"{"type":"assistant","message":{"content":"Fixed!"}}"#;
+        // Finished turn: assistant with stop_reason="end_turn" followed by "turn_duration" and "cost-state"
+        let finished_turn_with_housekeeping = concat!(
+            r#"{"type":"assistant","message":{"stop_reason":"end_turn","content":[{"type":"text","text":"Fixed!"}]}}"#,
+            "\n",
+            r#"{"type":"system","subtype":"turn_duration","durationMs":4200}"#,
+            "\n",
+            r#"{"type":"last-prompt","text":"fix bug"}"#,
+            "\n",
+            r#"{"type":"cost-state","cost":0.05}"#
+        );
         assert!(!is_claude_transcript_busy(
-            assistant_done,
+            finished_turn_with_housekeeping,
+            Duration::from_secs(15)
+        ));
+
+        // Subagent meta.json:
+        let running_meta =
+            r#"{"agentType":"general-purpose","description":"T1","finished":false}"#;
+        assert!(is_claude_subagent_meta_busy(
+            running_meta,
+            Duration::from_secs(120)
+        ));
+
+        let finished_meta =
+            r#"{"agentType":"general-purpose","description":"T1","finished":true}"#;
+        assert!(!is_claude_subagent_meta_busy(
+            finished_meta,
+            Duration::from_secs(5)
+        ));
+    }
+
+    #[test]
+    fn codex_transcript_busy_until_turn_completed() {
+        let mid_turn = concat!(
+            r#"{"type":"turn.started"}"#,
+            "\n",
+            r#"{"type":"item.completed","item":{"type":"command_execution","command":"pytest"}}"#
+        );
+        assert!(is_codex_transcript_busy(mid_turn, Duration::from_secs(20)));
+
+        let completed_turn = concat!(
+            r#"{"type":"item.completed","item":{"type":"agent_message","text":"All tests pass."}}"#,
+            "\n",
+            r#"{"type":"turn.completed","usage":{"input_tokens":100,"output_tokens":50}}"#
+        );
+        assert!(!is_codex_transcript_busy(
+            completed_turn,
             Duration::from_secs(10)
         ));
     }
