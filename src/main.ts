@@ -3,7 +3,7 @@ import { listen } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 
 export type CatState = "sleeping" | "awake" | "working";
-export type StayAwakePolicy = "off" | "indefinite" | "30m" | "1h" | "2h";
+export type StayAwakePolicy = "off" | "indefinite" | "until-agent-done" | "30m" | "1h" | "2h";
 export type DockPosition = "bottom-right" | "bottom-left" | "pinned" | "free-drag";
 export type TrackedAgent = "none" | "claude" | "codex" | "antigravity" | "cursor";
 
@@ -178,7 +178,9 @@ function renderState(snapshot: AppStateSnapshot): void {
     timerBadge.textContent =
       snapshot.remaining_seconds !== null && snapshot.remaining_seconds > 0
         ? formatDuration(snapshot.remaining_seconds)
-        : "∞";
+        : snapshot.policy === "until-agent-done"
+          ? "Agent"
+          : "∞";
     timerBadge.classList.remove("hidden");
   } else {
     statusLabel.textContent = "Sleeping";

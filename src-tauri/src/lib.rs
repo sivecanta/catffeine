@@ -37,6 +37,8 @@ pub enum StayAwakePolicy {
     Off,
     #[serde(rename = "indefinite")]
     Indefinite,
+    #[serde(rename = "until-agent-done")]
+    UntilAgentDone,
     #[serde(rename = "30m")]
     Minutes30,
     #[serde(rename = "1h")]
@@ -48,7 +50,7 @@ pub enum StayAwakePolicy {
 impl StayAwakePolicy {
     pub fn duration(self) -> Option<Duration> {
         match self {
-            Self::Off | Self::Indefinite => None,
+            Self::Off | Self::Indefinite | Self::UntilAgentDone => None,
             Self::Minutes30 => Some(Duration::from_secs(30 * 60)),
             Self::Hour1 => Some(Duration::from_secs(60 * 60)),
             Self::Hours2 => Some(Duration::from_secs(2 * 60 * 60)),
@@ -129,7 +131,27 @@ impl AppStateInner {
     }
 
     pub fn agent_stop(&mut self) {
+        let had_agents = self.active_agents > 0;
         self.active_agents = self.active_agents.saturating_sub(1);
+        if had_agents
+            && self.active_agents == 0
+            && !self.tracked_agent_busy
+            && self.policy == StayAwakePolicy::UntilAgentDone
+        {
+            self.set_policy(StayAwakePolicy::Off);
+        }
+    }
+
+    pub fn set_tracked_agent_busy(&mut self, busy: bool) {
+        let was_busy = self.tracked_agent_busy;
+        self.tracked_agent_busy = busy;
+        if was_busy
+            && !busy
+            && self.active_agents == 0
+            && self.policy == StayAwakePolicy::UntilAgentDone
+        {
+            self.set_policy(StayAwakePolicy::Off);
+        }
     }
 
     pub fn reset_for_quit(&mut self) {
@@ -363,6 +385,7 @@ fn quit_app(app: AppHandle) {
 fn setup_system_tray(app: &AppHandle) -> Result<(), Box<dyn std::error::Error>> {
     let stay_awake_submenu = SubmenuBuilder::new(app, "Stay Awake")
         .item(&MenuItemBuilder::with_id("policy_indefinite", "Indefinite").build(app)?)
+        .item(&MenuItemBuilder::with_id("policy_until_agent_done", "Until Agent Done").build(app)?)
         .item(&MenuItemBuilder::with_id("policy_30m", "30 Minutes").build(app)?)
         .item(&MenuItemBuilder::with_id("policy_1h", "1 Hour").build(app)?)
         .item(&MenuItemBuilder::with_id("policy_2h", "2 Hours").build(app)?)
@@ -431,6 +454,9 @@ fn setup_system_tray(app: &AppHandle) -> Result<(), Box<dyn std::error::Error>> 
             }
             "policy_indefinite" => {
                 sync_and_broadcast_state(app, |s| s.set_policy(StayAwakePolicy::Indefinite));
+            }
+            "policy_until_agent_done" => {
+                sync_and_broadcast_state(app, |s| s.set_policy(StayAwakePolicy::UntilAgentDone));
             }
             "policy_30m" => {
                 sync_and_broadcast_state(app, |s| s.set_policy(StayAwakePolicy::Minutes30));
@@ -509,7 +535,7 @@ fn spawn_timer_worker(app: AppHandle) {
                 let prev_busy = inner.tracked_agent_busy;
                 let busy_changed = prev_busy != next_busy;
                 if busy_changed {
-                    inner.tracked_agent_busy = next_busy;
+                    inner.set_tracked_agent_busy(next_busy);
                 }
                 let finished_agent = if prev_busy && !next_busy && inner.tracked_agent != TrackedAgent::None {
                     Some(inner.tracked_agent.display_name().to_string())
@@ -647,5 +673,29 @@ mod tests {
         // Extra stop calls saturate at 0 without underflow
         state.agent_stop();
         assert_eq!(state.active_agents, 0);
+    }
+
+    #[test]
+    fn until_agent_done_policy_sleeps_when_tracked_agent_finishes() {
+        let mut state = test_state();
+        state.set_policy(StayAwakePolicy::UntilAgentDone);
+
+        // Stays awake while waiting for an agent to start
+        let snap = state.reconcile();
+        assert_eq!(snap.cat_state, CatState::Awake);
+        assert!(snap.preventing_sleep);
+
+        // Enters working when tracked agent becomes busy
+        state.set_tracked_agent_busy(true);
+        let snap = state.reconcile();
+        assert_eq!(snap.cat_state, CatState::Working);
+        assert!(snap.preventing_sleep);
+
+        // Automatically resets to Off / Sleeping when tracked agent finishes
+        state.set_tracked_agent_busy(false);
+        let snap = state.reconcile();
+        assert_eq!(snap.policy, StayAwakePolicy::Off);
+        assert_eq!(snap.cat_state, CatState::Sleeping);
+        assert!(!snap.preventing_sleep);
     }
 }
