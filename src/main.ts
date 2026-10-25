@@ -100,6 +100,9 @@ function setMenuOpen(open: boolean): void {
   if (menuOpen === open) return;
   menuOpen = open;
   contextMenu.classList.toggle("hidden", !open);
+  if (open) {
+    void getCurrentWindow().setFocus().catch(() => {});
+  }
 }
 
 async function toggleAwakePolicy(): Promise<void> {
@@ -181,6 +184,10 @@ window.addEventListener("keydown", (event) => {
   if (event.key === "Escape") setMenuOpen(false);
 });
 
+window.addEventListener("blur", () => {
+  setMenuOpen(false);
+});
+
 window.addEventListener("mousedown", (event) => {
   if (menuOpen && !(event.target instanceof Element && event.target.closest("#context-menu"))) {
     setMenuOpen(false);
@@ -224,6 +231,9 @@ contextMenu.addEventListener("click", async (event) => {
 
 async function init(): Promise<void> {
   try {
+    await getCurrentWindow().onFocusChanged(({ payload: focused }) => {
+      if (!focused) setMenuOpen(false);
+    });
     await listen<AppStateSnapshot>("catffeine://state-changed", (event) => {
       renderState(event.payload);
     });

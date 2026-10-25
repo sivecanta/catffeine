@@ -323,15 +323,17 @@ body {
 /* Context Menu */
 .context-menu {
   position: fixed;
-  top: 4px;
+  bottom: 6px;
   left: 50%;
   transform: translateX(-50%);
   width: 204px;
-  background: rgba(22, 19, 28, 0.96);
+  max-height: calc(100vh - 12px);
+  overflow-y: auto;
+  background: rgba(22, 19, 28, 0.97);
   border: 2px solid #564964;
   border-radius: 6px;
   padding: 5px;
-  box-shadow: 0 8px 0 rgba(0, 0, 0, 0.45);
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.6);
   z-index: 100;
   pointer-events: auto;
 }
