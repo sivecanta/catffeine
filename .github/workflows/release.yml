@@ -83,6 +83,8 @@ jobs:
 
             *(All attached files are also listed under **Assets** at the bottom of this release.)*
 
+            > **First launch of unsigned pre-release builds**: Windows Smart App Control / SmartScreen and macOS Gatekeeper may warn about apps without a paid code-signing certificate. On Windows choose **More info → Run anyway** (SmartScreen); on macOS right-click `Catffeine.app` → **Open** once. The macOS builds are ad-hoc signed so Apple Silicon won't report them as "damaged".
+
             ---
 
             ### 🚀 What's New Since `v0.1.0`
