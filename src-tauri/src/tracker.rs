@@ -1,20 +1,15 @@
 //! Background AI Agent Activity Detector (`Claude`, `Codex`, `Antigravity`, `Cursor`).
 //!
-//! Tracks a single user-selected agent and detects when it is actively working vs. finished:
-//! - **Antigravity**: Inspects the tail of `~/.gemini/antigravity/brain/*/.system_generated/logs/transcript.jsonl`
+//! Tracks a single user-selected agent and detects when it is actively working vs. finished
+//! across both native OS home directories (`USERPROFILE` / `HOME`) and WSL (`\\wsl.localhost\<distro>\home\<user>`):
+//! - **Antigravity**: Inspects `~/.gemini/antigravity/brain/*/.system_generated/logs/transcript.jsonl`
 //!   plus active `.system_generated/tasks/*.log` files.
-//!   An Antigravity conversation is busy if:
-//!   1. Any background task step in the tail still has `"status":"RUNNING"` without a matching
-//!      `"type":"SYSTEM_MESSAGE"` completion for that task (`sender=<task-id>`), OR
-//!   2. Any `.system_generated/tasks/*.log` file was modified recently, OR
-//!   3. The final step in `transcript.jsonl` is not a `"PLANNER_RESPONSE"`, OR
-//!   4. The final `"PLANNER_RESPONSE"` has `"tool_calls"` (inline or in `"truncated_fields"`), OR
-//!   5. `transcript.jsonl` was written within the last 5 seconds.
-//! - **Claude (`Claude Code`)**: Inspects `~/.claude/projects/*/*.jsonl`; a turn is only finished
-//!   when the final entry is `"type":"assistant"` without a pending `"tool_use"` block.
-//! - **Codex (`OpenAI Codex CLI`)**: Inspects `~/.codex` session logs with a 15-second settle window.
-//! - **Cursor**: Inspects `~/.cursor` and `%APPDATA%/Cursor/User/workspaceStorage` with a 15-second
-//!   settle window.
+//! - **Cursor**: Inspects `~/.cursor/projects/*/agent-transcripts/**/*.jsonl` (both on Windows/macOS/Linux
+//!   and inside WSL!). Cursor writes `{"role":"user",...}`, then `{"role":"assistant",...}` (with `tool_use`),
+//!   and finally writes an explicit **`{"type":"turn_ended","status":"..."}`** line ONLY when the entire
+//!   agent turn has finished!
+//! - **Claude (`Claude Code`)**: Inspects `~/.claude/projects/**/*.jsonl` across native + WSL homes.
+//! - **Codex (`OpenAI Codex CLI`)**: Inspects `~/.codex` session logs across native + WSL homes.
 
 use std::path::{Path, PathBuf};
 use std::time::{Duration, SystemTime};
@@ -46,14 +41,6 @@ impl TrackedAgent {
 }
 
 /// Pure classifier for the tail of an Antigravity `transcript.jsonl` file.
-///
-/// Handles two critical mid-turn cases:
-/// 1. **Synchronous tool steps**: `USER_INPUT` -> `PLANNER_RESPONSE (tool_calls)` -> `GENERIC` -> ...
-/// 2. **Async background tasks**: `GENERIC` with `"status":"RUNNING"` and `task id: .../task-N`,
-///    followed by an interim `PLANNER_RESPONSE` ("I launched the command and will wait for it to finish")
-///    while the background task is still running! In `transcript.jsonl` (append-only), the `RUNNING`
-///    line remains `"status":"RUNNING"` until a later `"type":"SYSTEM_MESSAGE"` line arrives with
-///    `Task id ".../task-N" finished`.
 pub fn is_antigravity_transcript_busy(tail_text: &str, age: Duration) -> bool {
     if age > Duration::from_secs(600) {
         return false;
@@ -82,7 +69,6 @@ pub fn is_antigravity_transcript_busy(tail_text: &str, age: Duration) -> bool {
                     pending_running_tasks.push(task_id);
                 }
             } else {
-                // Unknown running step without task_id: if it's within the last 3 lines, still busy
                 pending_running_tasks.push("__running__");
             }
         } else if line.contains(r#""type":"SYSTEM_MESSAGE""#)
@@ -100,8 +86,6 @@ pub fn is_antigravity_transcript_busy(tail_text: &str, age: Duration) -> bool {
         || last_line.contains(r#""type": "PLANNER_RESPONSE""#);
 
     if !is_planner_response {
-        // Any non-PLANNER_RESPONSE step (USER_INPUT, GENERIC tool result, SYSTEM_MESSAGE, etc.)
-        // means the agent is mid-turn thinking about the tool output or user message!
         return true;
     }
 
@@ -123,6 +107,33 @@ fn extract_running_task_id(line: &str) -> Option<&str> {
     }
 }
 
+/// Pure classifier for the last line of a Cursor `agent-transcripts/<id>/<id>.jsonl` file.
+///
+/// Cursor appends:
+/// - `{"role":"user","message":...}` when a prompt starts
+/// - `{"role":"assistant","message":{"content":[{"type":"tool_use",...}]}}` for each tool call
+/// - `{"role":"assistant","message":{"content":[{"type":"text",...}]}}` for assistant text
+/// - `{"type":"turn_ended","status":"success"}` (or `"error"` / `"cancelled"` / `"aborted"`)
+///   ONLY when the entire agent turn has completed!
+///
+/// Therefore, a Cursor agent transcript is busy for the entire turn until `"type":"turn_ended"`
+/// is written as the final line!
+pub fn is_cursor_transcript_busy(last_line: &str, age: Duration) -> bool {
+    if age > Duration::from_secs(600) {
+        return false;
+    }
+    let trimmed = last_line.trim();
+    if trimmed.is_empty() {
+        return false;
+    }
+    // If the turn explicitly ended, it's NOT busy!
+    if trimmed.contains(r#""type":"turn_ended""#) || trimmed.contains(r#""type": "turn_ended""#) {
+        return false;
+    }
+    // Otherwise (role: user, role: assistant with tool_use or text before turn_ended), the turn is STILL running!
+    true
+}
+
 /// Pure classifier for the last line of a Claude Code session `.jsonl` file.
 pub fn is_claude_transcript_busy(last_line: &str, age: Duration) -> bool {
     if age > Duration::from_secs(600) {
@@ -133,6 +144,9 @@ pub fn is_claude_transcript_busy(last_line: &str, age: Duration) -> bool {
     }
     let trimmed = last_line.trim();
     if trimmed.is_empty() {
+        return false;
+    }
+    if trimmed.contains(r#""type":"turn_ended""#) {
         return false;
     }
     let is_assistant =
@@ -154,8 +168,11 @@ pub fn is_tracked_agent_busy(agent: TrackedAgent) -> bool {
     }
 }
 
+/// Returns candidate home directories, including both native OS (`USERPROFILE` / `HOME`)
+/// and WSL home directories (`\\wsl.localhost\<distro>\home\<user>`) when running on Windows!
 fn candidate_home_dirs() -> Vec<PathBuf> {
     let mut homes = Vec::new();
+
     if let Some(up) = std::env::var_os("USERPROFILE") {
         homes.push(PathBuf::from(up));
     }
@@ -165,6 +182,24 @@ fn candidate_home_dirs() -> Vec<PathBuf> {
             homes.push(p);
         }
     }
+
+    // On Windows, also include WSL home directories so agents running in WSL workspaces
+    // (Cursor Remote-WSL, Claude Code in WSL, Codex in WSL) are tracked seamlessly!
+    #[cfg(target_os = "windows")]
+    if let Some(user) = homes
+        .first()
+        .and_then(|p| p.file_name())
+        .and_then(|n| n.to_str())
+        .map(str::to_string)
+    {
+        for distro in ["Ubuntu", "Ubuntu-24.04", "Ubuntu-22.04", "Debian"] {
+            let wsl_home = PathBuf::from(format!(r"\\wsl.localhost\{distro}\home\{user}"));
+            if wsl_home.exists() && !homes.contains(&wsl_home) {
+                homes.push(wsl_home);
+            }
+        }
+    }
+
     homes
 }
 
@@ -180,7 +215,6 @@ fn read_tail_text(path: &Path, max_bytes: u64) -> Option<String> {
     let mut buf = Vec::with_capacity(read_size as usize);
     file.read_to_end(&mut buf).ok()?;
     let text = String::from_utf8_lossy(&buf);
-    // If we seeked into the middle of the file, skip the partial first line
     if len > max_bytes {
         if let Some(idx) = text.find('\n') {
             return Some(text[idx + 1..].to_string());
@@ -222,7 +256,6 @@ fn check_antigravity_busy() -> bool {
                     return true;
                 }
             }
-            // Also check if any background task log in `.system_generated/tasks` was written recently
             let tasks_dir = sys_dir.join("tasks");
             if let Some((_task_log, task_age)) = most_recent_file_age_under(&tasks_dir, 2, now) {
                 if task_age <= Duration::from_secs(8) {
@@ -269,6 +302,30 @@ fn most_recent_file_age_under(
     best
 }
 
+fn check_cursor_busy() -> bool {
+    let now = SystemTime::now();
+    for home in candidate_home_dirs() {
+        let projects_dir = home.join(".cursor").join("projects");
+        let Ok(projects) = std::fs::read_dir(projects_dir) else {
+            continue;
+        };
+        for project in projects.flatten() {
+            let transcripts_dir = project.path().join("agent-transcripts");
+            if let Some((path, age)) = most_recent_file_age_under(&transcripts_dir, 3, now) {
+                if age <= Duration::from_secs(600) && path.extension().is_some_and(|e| e == "jsonl")
+                {
+                    if let Some(last_line) = read_last_non_empty_line(&path) {
+                        if is_cursor_transcript_busy(&last_line, age) {
+                            return true;
+                        }
+                    }
+                }
+            }
+        }
+    }
+    false
+}
+
 fn check_claude_busy() -> bool {
     let now = SystemTime::now();
     for home in candidate_home_dirs() {
@@ -297,30 +354,6 @@ fn check_codex_busy() -> bool {
     false
 }
 
-fn check_cursor_busy() -> bool {
-    let now = SystemTime::now();
-    for home in candidate_home_dirs() {
-        let cursor_dir = home.join(".cursor");
-        if let Some((_path, age)) = most_recent_file_age_under(&cursor_dir, 3, now) {
-            if age <= Duration::from_secs(15) {
-                return true;
-            }
-        }
-    }
-    if let Some(appdata) = std::env::var_os("APPDATA") {
-        let workspace_storage = PathBuf::from(appdata)
-            .join("Cursor")
-            .join("User")
-            .join("workspaceStorage");
-        if let Some((_path, age)) = most_recent_file_age_under(&workspace_storage, 3, now) {
-            if age <= Duration::from_secs(15) {
-                return true;
-            }
-        }
-    }
-    false
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -333,7 +366,6 @@ mod tests {
             Duration::from_secs(30)
         ));
 
-        // Tool call inline
         let tool_call_line =
             r#"{"step_index":11,"type":"PLANNER_RESPONSE","tool_calls":[{"id":"1"}]}"#;
         assert!(is_antigravity_transcript_busy(
@@ -341,7 +373,6 @@ mod tests {
             Duration::from_secs(30)
         ));
 
-        // Tool call truncated into truncated_fields
         let truncated_tool_call =
             r#"{"step_index":12,"type":"PLANNER_RESPONSE","truncated_fields":["tool_calls"]}"#;
         assert!(is_antigravity_transcript_busy(
@@ -349,7 +380,6 @@ mod tests {
             Duration::from_secs(30)
         ));
 
-        // GENERIC tool result step (model is now thinking about the tool output!)
         let generic_tool_output =
             r#"{"step_index":13,"type":"GENERIC","status":"DONE","content":"Created file."}"#;
         assert!(is_antigravity_transcript_busy(
@@ -357,7 +387,6 @@ mod tests {
             Duration::from_secs(45)
         ));
 
-        // Background task RUNNING followed by interim PLANNER_RESPONSE ("I launched the command and will wait")
         let running_bg_task_with_interim_response = concat!(
             r#"{"step_index":629,"type":"GENERIC","status":"RUNNING","content":"Tool is running as a background task with task id: conv-1/task-629\nLog output"}"#,
             "\n",
@@ -368,7 +397,6 @@ mod tests {
             Duration::from_secs(40)
         ));
 
-        // Once the background task finishes via SYSTEM_MESSAGE AND the model emits its final PLANNER_RESPONSE:
         let finished_bg_task_and_final_response = concat!(
             r#"{"step_index":629,"type":"GENERIC","status":"RUNNING","content":"Tool is running as a background task with task id: conv-1/task-629\nLog output"}"#,
             "\n",
@@ -381,6 +409,35 @@ mod tests {
         assert!(!is_antigravity_transcript_busy(
             finished_bg_task_and_final_response,
             Duration::from_secs(8)
+        ));
+    }
+
+    #[test]
+    fn cursor_transcript_busy_until_explicit_turn_ended_marker() {
+        let user_prompt = r#"{"role":"user","message":{"content":[{"type":"text","text":"proceed pls"}]}}"#;
+        assert!(is_cursor_transcript_busy(
+            user_prompt,
+            Duration::from_secs(60)
+        ));
+
+        let assistant_tool_use =
+            r#"{"role":"assistant","message":{"content":[{"type":"tool_use","name":"Write"}]}}"#;
+        assert!(is_cursor_transcript_busy(
+            assistant_tool_use,
+            Duration::from_secs(90)
+        ));
+
+        let assistant_text_before_turn_ended =
+            r#"{"role":"assistant","message":{"content":[{"type":"text","text":"Plan written."}]}}"#;
+        assert!(is_cursor_transcript_busy(
+            assistant_text_before_turn_ended,
+            Duration::from_secs(30)
+        ));
+
+        let turn_ended = r#"{"type":"turn_ended","status":"success"}"#;
+        assert!(!is_cursor_transcript_busy(
+            turn_ended,
+            Duration::from_secs(1)
         ));
     }
 
