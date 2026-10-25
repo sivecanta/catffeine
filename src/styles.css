@@ -497,6 +497,34 @@ body {
   color: #f59e0b;
 }
 
+.menu-volume-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 8px 4px 28px;
+}
+
+.volume-label {
+  font-size: 10px;
+  color: #94a3b8;
+  font-weight: 700;
+}
+
+.meow-volume-slider {
+  flex: 1;
+  height: 4px;
+  accent-color: #f59e0b;
+  cursor: pointer;
+}
+
+.volume-value {
+  font-size: 10px;
+  color: #fde68a;
+  font-variant-numeric: tabular-nums;
+  min-width: 28px;
+  text-align: right;
+}
+
 .menu-divider {
   height: 2px;
   background: rgba(255, 255, 255, 0.1);

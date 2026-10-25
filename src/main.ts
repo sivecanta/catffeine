@@ -33,6 +33,9 @@ const trackMenu = document.getElementById("track-menu") as HTMLElement;
 const quickPinBtn = document.getElementById("quick-pin-btn") as HTMLButtonElement;
 const unhideBtn = document.getElementById("unhide-btn") as HTMLButtonElement;
 const contextMenu = document.getElementById("context-menu") as HTMLElement;
+const menuMuteMeow = document.getElementById("menu-mute-meow") as HTMLButtonElement;
+const meowVolumeSlider = document.getElementById("meow-volume-slider") as HTMLInputElement;
+const meowVolumeValue = document.getElementById("meow-volume-value") as HTMLElement;
 const menuAlwaysOnTop = document.getElementById("menu-always-on-top") as HTMLButtonElement;
 const menuLaunchOnStart = document.getElementById("menu-launch-on-start") as HTMLButtonElement;
 const menuToggleVisibleLabel = document.getElementById("menu-toggle-visible-label") as HTMLElement;
@@ -60,6 +63,52 @@ let currentState: AppStateSnapshot = {
 let menuOpen = false;
 let audioCtx: AudioContext | null = null;
 let meowTimer: number | null = null;
+let meowMuted = localStorage.getItem("catffeine_meow_muted") === "true";
+let meowVolume = Number(localStorage.getItem("catffeine_meow_volume") ?? "70");
+if (Number.isNaN(meowVolume) || meowVolume < 0 || meowVolume > 100) {
+  meowVolume = 70;
+}
+
+function renderSoundControls(): void {
+  menuMuteMeow.classList.toggle("active", meowMuted);
+  meowVolumeSlider.value = String(meowVolume);
+  meowVolumeValue.textContent = meowMuted ? "Muted" : `${meowVolume}%`;
+}
+
+renderSoundControls();
+
+function playMeowSound(): void {
+  if (meowMuted || meowVolume <= 0) return;
+
+  try {
+    const Ctx =
+      window.AudioContext ||
+      (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
+    if (!audioCtx) audioCtx = new Ctx();
+    if (audioCtx.state === "suspended") void audioCtx.resume();
+
+    const peakGain = Math.max(0.002, (meowVolume / 100) * 0.28);
+    const now = audioCtx.currentTime;
+    const osc = audioCtx.createOscillator();
+    const gain = audioCtx.createGain();
+
+    osc.type = "triangle";
+    osc.frequency.setValueAtTime(520, now);
+    osc.frequency.exponentialRampToValueAtTime(880, now + 0.09);
+    osc.frequency.exponentialRampToValueAtTime(620, now + 0.24);
+
+    gain.gain.setValueAtTime(0.001, now);
+    gain.gain.linearRampToValueAtTime(peakGain, now + 0.03);
+    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.26);
+
+    osc.connect(gain);
+    gain.connect(audioCtx.destination);
+    osc.start(now);
+    osc.stop(now + 0.27);
+  } catch {
+    // Ignore if audio device is unavailable
+  }
+}
 
 function playWakeMeow(text = "Meow!"): void {
   // Show pixel speech bubble
@@ -72,32 +121,7 @@ function playWakeMeow(text = "Meow!"): void {
     meowBubble.classList.add("hidden");
   }, 1400);
 
-  // Synthesize a cozy pixel-cat "mew!" chirp via Web Audio API
-  try {
-    const Ctx = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
-    if (!audioCtx) audioCtx = new Ctx();
-    if (audioCtx.state === "suspended") void audioCtx.resume();
-
-    const now = audioCtx.currentTime;
-    const osc = audioCtx.createOscillator();
-    const gain = audioCtx.createGain();
-
-    osc.type = "triangle";
-    osc.frequency.setValueAtTime(520, now);
-    osc.frequency.exponentialRampToValueAtTime(880, now + 0.09);
-    osc.frequency.exponentialRampToValueAtTime(620, now + 0.24);
-
-    gain.gain.setValueAtTime(0.001, now);
-    gain.gain.linearRampToValueAtTime(0.18, now + 0.03);
-    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.26);
-
-    osc.connect(gain);
-    gain.connect(audioCtx.destination);
-    osc.start(now);
-    osc.stop(now + 0.27);
-  } catch {
-    // Ignore if audio device is unavailable
-  }
+  playMeowSound();
 }
 
 export function formatDuration(seconds: number): string {
@@ -283,10 +307,36 @@ window.addEventListener("mousedown", (event) => {
   }
 });
 
+// Volume slider adjustment (keeps menu open and plays a quick preview chirp on release)
+meowVolumeSlider.addEventListener("input", () => {
+  meowVolume = Number(meowVolumeSlider.value);
+  if (meowVolume > 0 && meowMuted) {
+    meowMuted = false;
+    localStorage.setItem("catffeine_meow_muted", "false");
+  }
+  localStorage.setItem("catffeine_meow_volume", String(meowVolume));
+  renderSoundControls();
+});
+
+meowVolumeSlider.addEventListener("change", () => {
+  playMeowSound();
+});
+
 // Single delegated click listener for all context menu actions
 contextMenu.addEventListener("click", async (event) => {
   const btn = event.target instanceof Element ? event.target.closest("button") : null;
   if (!btn) return;
+
+  if (btn.id === "menu-mute-meow") {
+    meowMuted = !meowMuted;
+    localStorage.setItem("catffeine_meow_muted", String(meowMuted));
+    renderSoundControls();
+    if (!meowMuted) {
+      playMeowSound();
+    }
+    return;
+  }
+
   setMenuOpen(false);
 
   if (btn.dataset.policy) {

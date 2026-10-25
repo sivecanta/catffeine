@@ -304,6 +304,26 @@
         </button>
 
         <div class="menu-divider"></div>
+        <div class="menu-section-title">Sound</div>
+        <button type="button" class="menu-item" id="menu-mute-meow">
+          <span class="menu-check"></span>
+          <span id="menu-mute-meow-label">Mute Meow</span>
+        </button>
+        <div class="menu-volume-row">
+          <span class="volume-label">Vol</span>
+          <input
+            type="range"
+            id="meow-volume-slider"
+            class="meow-volume-slider"
+            min="0"
+            max="100"
+            value="70"
+            aria-label="Meow Volume"
+          />
+          <span id="meow-volume-value" class="volume-value">70%</span>
+        </div>
+
+        <div class="menu-divider"></div>
         <button type="button" class="menu-item" id="menu-always-on-top">
           <span class="menu-check" id="check-always-on-top"></span>
           <span>Always on Top</span>

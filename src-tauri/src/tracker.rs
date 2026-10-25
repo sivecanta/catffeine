@@ -1,16 +1,17 @@
 //! Background AI Agent Activity Detector (`Claude`, `Codex`, `Antigravity`, `Cursor`).
 //!
 //! Tracks a single user-selected agent and detects when it is actively working vs. finished:
-//! - **Antigravity**: Checks `~/.gemini/antigravity/brain/*/.system_generated/logs/transcript.jsonl`
-//!   modified within the last 10 minutes; if the last JSONL line has `"type":"USER_INPUT"` or is a
-//!   `"PLANNER_RESPONSE"` with `"tool_calls"`, or if the transcript was written within the last 4 seconds,
-//!   Antigravity is actively working. When the final line is a `"PLANNER_RESPONSE"` without `"tool_calls"`
-//!   and settles (>3s), the turn is complete!
-//! - **Claude (`Claude Code`)**: Checks `~/.claude/projects/*/*.jsonl` (and WSL `~/.claude/projects`)
-//!   modified recently, plus active `claude` CLI processes.
-//! - **Codex (`OpenAI Codex CLI`)**: Checks `~/.codex/sessions/**/*.jsonl` modified recently, plus active
-//!   `codex` CLI processes.
-//! - **Cursor**: Checks recently modified Cursor state/storage files and active Cursor agent processes.
+//! - **Antigravity**: Inspects `~/.gemini/antigravity/brain/*/.system_generated/logs/transcript.jsonl`
+//!   plus active `.system_generated/tasks/*.log` files.
+//!   An Antigravity conversation is mid-turn unless the final step in `transcript.jsonl` is a
+//!   `"PLANNER_RESPONSE"` with `"status":"DONE"`, has **no** `"tool_calls"` (and `"tool_calls"` was
+//!   not truncated into `"truncated_fields"`), and no transcript or background task log has been
+//!   written within the settle window.
+//! - **Claude (`Claude Code`)**: Inspects `~/.claude/projects/*/*.jsonl`; a turn is only finished
+//!   when the final entry is `"type":"assistant"` without a pending `"tool_use"` block.
+//! - **Codex (`OpenAI Codex CLI`)**: Inspects `~/.codex` session logs with a 15-second settle window.
+//! - **Cursor**: Inspects `~/.cursor` and `%APPDATA%/Cursor/User/workspaceStorage` with a 15-second
+//!   settle window.
 
 use std::path::{Path, PathBuf};
 use std::time::{Duration, SystemTime};
@@ -43,31 +44,39 @@ impl TrackedAgent {
 
 /// Pure classifier for the last line of an Antigravity `transcript.jsonl` file.
 ///
-/// Returns `true` if the agent is mid-turn:
-/// - The file was written within `recent_write_threshold` (e.g. 4 seconds), OR
-/// - The last JSONL entry is a `USER_INPUT` step, OR
-/// - The last JSONL entry is a `PLANNER_RESPONSE` that made `tool_calls` (waiting for tool execution).
+/// Key insight: During a multi-step agent turn, Antigravity appends intermediate steps like:
+/// - `"type":"USER_INPUT"` (user prompt received)
+/// - `"type":"PLANNER_RESPONSE"` with `"tool_calls":[...]` (or `"truncated_fields":["tool_calls"]`)
+/// - `"type":"GENERIC"` (tool output returned; model is now thinking for the next step!)
+/// - `"type":"SYSTEM_MESSAGE"` (background task finished; model is now waking up!)
+///
+/// Therefore, a turn is **busy** during ALL of those intermediate steps, and is ONLY idle/done
+/// when the last step is a `"PLANNER_RESPONSE"` that has no `"tool_calls"` (neither inline nor
+/// in `"truncated_fields"`) and the file has settled for >5 seconds.
 pub fn is_antigravity_transcript_busy(last_line: &str, age: Duration) -> bool {
     if age > Duration::from_secs(600) {
         return false;
     }
-    if age <= Duration::from_secs(4) {
+    if age <= Duration::from_secs(5) {
         return true;
     }
     let trimmed = last_line.trim();
     if trimmed.is_empty() {
         return false;
     }
-    if trimmed.contains(r#""type":"USER_INPUT""#) || trimmed.contains(r#""type": "USER_INPUT""#) {
+
+    let is_planner_response = trimmed.contains(r#""type":"PLANNER_RESPONSE""#)
+        || trimmed.contains(r#""type": "PLANNER_RESPONSE""#);
+
+    if !is_planner_response {
+        // Any non-PLANNER_RESPONSE step (USER_INPUT, GENERIC tool result, SYSTEM_MESSAGE, etc.)
+        // means the agent is mid-turn thinking about the tool output or user message!
         return true;
     }
-    if (trimmed.contains(r#""type":"PLANNER_RESPONSE""#)
-        || trimmed.contains(r#""type": "PLANNER_RESPONSE""#))
-        && (trimmed.contains(r#""tool_calls":[{"#) || trimmed.contains(r#""tool_calls": [{"#))
-    {
-        return true;
-    }
-    false
+
+    trimmed.contains(r#""tool_calls":[{"#)
+        || trimmed.contains(r#""tool_calls": [{"#)
+        || trimmed.contains(r#""tool_calls""#)
 }
 
 /// Pure classifier for the last line of a Claude Code session `.jsonl` file.
@@ -75,18 +84,19 @@ pub fn is_claude_transcript_busy(last_line: &str, age: Duration) -> bool {
     if age > Duration::from_secs(600) {
         return false;
     }
-    if age <= Duration::from_secs(4) {
+    if age <= Duration::from_secs(5) {
         return true;
     }
     let trimmed = last_line.trim();
     if trimmed.is_empty() {
         return false;
     }
-    // In Claude Code JSONL, if the last message is from "user" or is a tool_use, Claude is still working.
-    if trimmed.contains(r#""type":"user""#) || trimmed.contains(r#""type":"tool_use""#) {
+    let is_assistant =
+        trimmed.contains(r#""type":"assistant""#) || trimmed.contains(r#""type": "assistant""#);
+    if !is_assistant {
         return true;
     }
-    false
+    trimmed.contains(r#""type":"tool_use""#) || trimmed.contains(r#""type": "tool_use""#)
 }
 
 /// Checks whether the currently selected [`TrackedAgent`] is actively working right now.
@@ -121,7 +131,7 @@ fn read_last_non_empty_line(path: &Path) -> Option<String> {
     if len == 0 {
         return None;
     }
-    let read_size = len.min(16_384);
+    let read_size = len.min(32_768);
     file.seek(SeekFrom::End(-(read_size as i64))).ok()?;
     let mut buf = Vec::with_capacity(read_size as usize);
     file.read_to_end(&mut buf).ok()?;
@@ -140,11 +150,8 @@ fn check_antigravity_busy() -> bool {
             continue;
         };
         for entry in entries.flatten() {
-            let transcript = entry
-                .path()
-                .join(".system_generated")
-                .join("logs")
-                .join("transcript.jsonl");
+            let sys_dir = entry.path().join(".system_generated");
+            let transcript = sys_dir.join("logs").join("transcript.jsonl");
             let Ok(meta) = std::fs::metadata(&transcript) else {
                 continue;
             };
@@ -160,12 +167,23 @@ fn check_antigravity_busy() -> bool {
                     return true;
                 }
             }
+            // Also check if any background task log in `.system_generated/tasks` was written recently
+            let tasks_dir = sys_dir.join("tasks");
+            if let Some((_task_log, task_age)) = most_recent_file_age_under(&tasks_dir, 2, now) {
+                if task_age <= Duration::from_secs(6) {
+                    return true;
+                }
+            }
         }
     }
     false
 }
 
-fn most_recent_file_age_under(dir: &Path, max_depth: u8, now: SystemTime) -> Option<(PathBuf, Duration)> {
+fn most_recent_file_age_under(
+    dir: &Path,
+    max_depth: u8,
+    now: SystemTime,
+) -> Option<(PathBuf, Duration)> {
     if max_depth == 0 || !dir.exists() {
         return None;
     }
@@ -216,7 +234,7 @@ fn check_codex_busy() -> bool {
     for home in candidate_home_dirs() {
         let codex_dir = home.join(".codex");
         if let Some((_path, age)) = most_recent_file_age_under(&codex_dir, 4, now) {
-            if age <= Duration::from_secs(5) {
+            if age <= Duration::from_secs(15) {
                 return true;
             }
         }
@@ -229,7 +247,7 @@ fn check_cursor_busy() -> bool {
     for home in candidate_home_dirs() {
         let cursor_dir = home.join(".cursor");
         if let Some((_path, age)) = most_recent_file_age_under(&cursor_dir, 3, now) {
-            if age <= Duration::from_secs(5) {
+            if age <= Duration::from_secs(15) {
                 return true;
             }
         }
@@ -240,7 +258,7 @@ fn check_cursor_busy() -> bool {
             .join("User")
             .join("workspaceStorage");
         if let Some((_path, age)) = most_recent_file_age_under(&workspace_storage, 3, now) {
-            if age <= Duration::from_secs(5) {
+            if age <= Duration::from_secs(15) {
                 return true;
             }
         }
@@ -253,28 +271,54 @@ mod tests {
     use super::*;
 
     #[test]
-    fn antigravity_transcript_busy_when_user_input_or_tool_calls_present() {
+    fn antigravity_transcript_busy_across_all_mid_turn_step_types() {
         let user_line = r#"{"step_index":10,"type":"USER_INPUT","status":"DONE"}"#;
         assert!(is_antigravity_transcript_busy(
             user_line,
-            Duration::from_secs(20)
+            Duration::from_secs(30)
         ));
 
+        // Tool call inline
         let tool_call_line =
             r#"{"step_index":11,"type":"PLANNER_RESPONSE","tool_calls":[{"id":"1"}]}"#;
         assert!(is_antigravity_transcript_busy(
             tool_call_line,
-            Duration::from_secs(20)
+            Duration::from_secs(30)
         ));
 
+        // Tool call truncated into truncated_fields
+        let truncated_tool_call =
+            r#"{"step_index":12,"type":"PLANNER_RESPONSE","truncated_fields":["tool_calls"]}"#;
+        assert!(is_antigravity_transcript_busy(
+            truncated_tool_call,
+            Duration::from_secs(30)
+        ));
+
+        // GENERIC tool result step (model is now thinking about the tool output!)
+        let generic_tool_output =
+            r#"{"step_index":13,"type":"GENERIC","status":"DONE","content":"Created file."}"#;
+        assert!(is_antigravity_transcript_busy(
+            generic_tool_output,
+            Duration::from_secs(45)
+        ));
+
+        // SYSTEM_MESSAGE step (background task completed, model is waking up!)
+        let system_msg =
+            r#"{"step_index":14,"type":"SYSTEM_MESSAGE","status":"DONE","content":"Task finished"}"#;
+        assert!(is_antigravity_transcript_busy(
+            system_msg,
+            Duration::from_secs(25)
+        ));
+
+        // Final PLANNER_RESPONSE without tool_calls:
         let final_response_line =
-            r#"{"step_index":12,"type":"PLANNER_RESPONSE","status":"DONE","content":"All done!"}"#;
-        // Within 4 seconds of write, still considered active/settling
+            r#"{"step_index":15,"type":"PLANNER_RESPONSE","status":"DONE","content":"All done!"}"#;
+        // Within 5 seconds of write, still settling
         assert!(is_antigravity_transcript_busy(
             final_response_line,
             Duration::from_secs(2)
         ));
-        // After 5+ seconds with no tool_calls, turn is finished!
+        // After 6+ seconds with no tool_calls, turn is truly finished!
         assert!(!is_antigravity_transcript_busy(
             final_response_line,
             Duration::from_secs(6)
@@ -285,6 +329,12 @@ mod tests {
     fn claude_transcript_busy_when_user_or_tool_use_is_latest() {
         let user_msg = r#"{"type":"user","message":{"content":"fix bug"}}"#;
         assert!(is_claude_transcript_busy(user_msg, Duration::from_secs(15)));
+
+        let tool_result_msg = r#"{"type":"tool_result","content":"ok"}"#;
+        assert!(is_claude_transcript_busy(
+            tool_result_msg,
+            Duration::from_secs(20)
+        ));
 
         let assistant_done = r#"{"type":"assistant","message":{"content":"Fixed!"}}"#;
         assert!(!is_claude_transcript_busy(
