@@ -1,0 +1,79 @@
+name: Release (Windows, macOS, Linux)
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Pre-release tag (e.g. v0.1.0-alpha.1 or v0.1.0)'
+        required: true
+        default: 'v0.1.0-alpha.1'
+
+permissions:
+  contents: write
+
+jobs:
+  build-release:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: macos-latest
+            args: --target aarch64-apple-darwin
+          - platform: macos-latest
+            args: --target x86_64-apple-darwin
+          - platform: windows-latest
+            args: ''
+          - platform: ubuntu-22.04
+            args: ''
+
+    runs-on: ${{ matrix.platform }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install Linux dependencies
+        if: matrix.platform == 'ubuntu-22.04'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Setup Rust stable
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.platform == 'macos-latest' && 'aarch64-apple-darwin,x86_64-apple-darwin' || '' }}
+
+      - name: Rust cache
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: './src-tauri -> target'
+
+      - name: Install frontend dependencies
+        run: npm ci
+
+      - name: Build and publish pre-release bundles
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tagName: ${{ github.ref_type == 'tag' && github.ref_name || inputs.tag }}
+          releaseName: 'Catffeine ${{ github.ref_type == 'tag' && github.ref_name || inputs.tag }} (Pre-release)'
+          releaseBody: |
+            A cozy, lightweight pixel-art desktop companion cat that lives on your desktop, Windows System Tray, or macOS Menu Bar — keeping your computer awake indefinitely, on a timer (`30m` / `1h` / `2h`), or automatically while AI agents and CLI tasks are running.
+
+            ### 📦 Downloads
+            - **macOS (Apple Silicon `M1`/`M2`/`M3`/`M4`)**: `Catffeine_0.1.0_aarch64.dmg`
+            - **macOS (Intel `x86_64`)**: `Catffeine_0.1.0_x64.dmg`
+            - **Windows 10 / 11 (`x86_64`)**: `Catffeine_0.1.0_x64-setup.exe` / `.msi` (or standalone `catffeine.exe`)
+            - **Linux (`x86_64`)**: `.deb` / `.rpm` / `.AppImage`
+          releaseDraft: false
+          prerelease: true
+          args: ${{ matrix.args }}
