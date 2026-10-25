@@ -1,0 +1,294 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Catffeine</title>
+    <link rel="stylesheet" href="/src/styles.css" />
+  </head>
+  <body>
+    <main id="app" class="app-root" data-state="sleeping" data-visible="true">
+      <!-- Compact Unhide Pill (shown when cat is hidden) -->
+      <button
+        type="button"
+        id="unhide-btn"
+        class="unhide-btn hidden"
+        title="Click to unhide Catffeine"
+      >
+        <span class="status-dot"></span>
+        <span>Show Cat</span>
+      </button>
+
+      <!-- Status pill & timer / agent badge + quick Pin button when in Free Drag -->
+      <div id="status-banner" class="status-banner" aria-live="polite">
+        <span id="status-dot" class="status-dot"></span>
+        <span id="status-label" class="status-label">Sleeping</span>
+        <span id="timer-badge" class="timer-badge hidden"></span>
+        <button
+          type="button"
+          id="quick-pin-btn"
+          class="quick-pin-btn hidden"
+          title="Lock cat at this current screen position"
+        >
+          Pin Here
+        </button>
+      </div>
+
+      <!-- Interactive Pixel-Art Cat Hitbox (32x30 grid @ 5x = 160x150px) -->
+      <div
+        id="cat-hitbox"
+        class="cat-hitbox"
+        role="button"
+        tabindex="0"
+        title="Left-click: toggle awake | Drag: move (when unpinned) | Right-click: menu"
+      >
+        <svg
+          class="cat-svg"
+          viewBox="0 0 32 30"
+          shape-rendering="crispEdges"
+          xmlns="http://www.w3.org/2000/svg"
+          aria-label="Catffeine Pixel Cat"
+        >
+          <!-- Ground pixel shadow -->
+          <path
+            class="px-shadow"
+            d="M6 27h20v1H6z M4 28h24v1H4z M7 29h18v1H7z"
+          />
+
+          <!-- Pixel Tail -->
+          <g class="cat-tail">
+            <path
+              class="px-outline"
+              d="M23 22h4v1h-4z M26 20h3v2h-3z M27 17h3v3h-3z M26 15h3v2h-3z"
+            />
+            <path
+              class="px-fur-dark"
+              d="M23 22h3v1h-3z M27 20h1v2h-1z M28 17h1v3h-1z M27 16h1v1h-1z"
+            />
+          </g>
+
+          <!-- Pixel Body -->
+          <g class="cat-body">
+            <path
+              class="px-outline"
+              d="M8 16h16v1H8z M7 17h18v1H7z M6 18h20v8H6z M7 26h18v2H7z"
+            />
+            <path
+              class="px-fur"
+              d="M8 17h16v1H8z M7 18h18v8H7z M8 26h16v1H8z"
+            />
+            <path
+              class="px-fur-dark"
+              d="M7 19h2v1H7z M23 19h2v1h-2z M7 21h3v1H7z M22 21h3v1h-3z M7 24h2v2H7z M23 24h2v2h-2z"
+            />
+            <path
+              class="px-belly"
+              d="M12 19h8v1h-8z M11 20h10v5H11z M12 25h8v1h-8z"
+            />
+          </g>
+
+          <!-- Pixel Head Group -->
+          <g class="cat-head-group">
+            <path
+              class="px-outline"
+              d="M7 4h2v1H7z M23 4h2v1h-2z
+                 M6 5h4v1H6z M22 5h4v1h-4z
+                 M6 6h5v1H6z M21 6h5v1h-5z
+                 M6 7h20v1H6z
+                 M5 8h22v8H5z
+                 M6 16h20v1H6z
+                 M7 17h18v1H7z"
+            />
+            <path
+              class="px-pink"
+              d="M7 6h2v2H7z M23 6h2v2h-2z"
+            />
+            <path
+              class="px-fur"
+              d="M7 5h1v1H7z M24 5h1v1h-1z
+                 M9 6h1v1H9z M22 6h1v1h-1z
+                 M9 7h14v1H9z
+                 M6 8h20v8H6z
+                 M7 16h18v1H7z"
+            />
+            <path class="px-fur-light" d="M11 7h10v1H11z" />
+            <path
+              class="px-fur-dark"
+              d="M13 7h1v3h-1z M15 7h2v4h-2z M18 7h1v3h-1z
+                 M6 11h2v1H6z M24 11h2v1h-2z
+                 M6 13h2v1H6z M24 13h2v1h-2z"
+            />
+            <path
+              class="px-belly"
+              d="M13 13h6v3h-6z M12 14h8v1h-8z"
+            />
+            <path
+              class="px-cheek"
+              d="M8 13h2v2H8z M22 13h2v2h-2z"
+            />
+            <path class="px-pink" d="M15 13h2v1h-2z" />
+            <path
+              class="px-outline"
+              d="M15 14h2v1h-2z M13 15h2v1h-2z M17 15h2v1h-2z"
+            />
+            <path
+              class="px-whisker"
+              d="M3 12h2v1H3z M3 14h2v1H3z M27 12h2v1h-2z M27 14h2v1h-2z"
+            />
+
+            <!-- Eyes: Open (Awake & Working states) -->
+            <g class="eyes-open">
+              <path
+                class="px-outline"
+                d="M10 10h2v3h-2z M20 10h2v3h-2z"
+              />
+              <path
+                class="px-white"
+                d="M10 10h1v1h-1z M20 10h1v1h-1z"
+              />
+            </g>
+
+            <!-- Eyes: Closed (Sleeping state) -->
+            <g class="eyes-closed">
+              <path
+                class="px-outline"
+                d="M9 12h4v1H9z M19 12h4v1h-4z"
+              />
+            </g>
+
+            <!-- Pixel Coding Glasses (Working state) -->
+            <g class="cat-glasses">
+              <path
+                class="px-glasses-frame"
+                d="M8 9h6v1H8z M18 9h6v1h-6z
+                   M8 10h1v4H8z M13 10h1v4h-1z M18 10h1v4h-1z M23 10h1v4h-1z
+                   M14 11h4v1h-4z
+                   M8 13h6v1H8z M18 13h6v1h-6z"
+              />
+              <path
+                class="px-glasses-lens"
+                d="M9 10h4v3H9z M19 10h4v3h-4z"
+              />
+              <path
+                class="px-white"
+                d="M9 10h1v1H9z M19 10h1v1h-1z"
+              />
+            </g>
+          </g>
+
+          <!-- Pixel Paws -->
+          <g class="cat-paw paw-left">
+            <path class="px-outline" d="M9 25h5v3H9z" />
+            <path class="px-belly" d="M10 26h3v1h-3z" />
+          </g>
+          <g class="cat-paw paw-right">
+            <path class="px-outline" d="M18 25h5v3h-5z" />
+            <path class="px-belly" d="M19 26h3v1h-3z" />
+          </g>
+
+          <!-- Pixel Coffee Mug (Awake & Working states) -->
+          <g class="coffee-mug">
+            <path
+              class="px-outline"
+              d="M1 21h6v7H1z M7 22h2v1H7z M8 23h1v2H8z M7 25h2v1H7z"
+            />
+            <path class="px-mug" d="M2 22h4v5H2z" />
+            <path class="px-mug-light" d="M2 22h1v4H2z" />
+            <path class="px-coffee" d="M2 21h4v1H2z" />
+          </g>
+
+          <!-- Pixel Steam (Awake & Working states) -->
+          <g class="layer-steam">
+            <path class="px-steam steam-1" d="M3 18h1v2H3z M4 16h1v1H4z" />
+            <path class="px-steam steam-2" d="M5 19h1v1H5z M4 17h1v1H4z" />
+          </g>
+
+          <!-- Pixel Mini Laptop (Working state) -->
+          <g class="mini-laptop">
+            <path
+              class="px-outline"
+              d="M9 20h14v7H9z M7 27h18v2H7z"
+            />
+            <path class="px-laptop-lid" d="M10 21h12v5H10z" />
+            <path class="px-laptop-base" d="M8 27h16v1H8z" />
+            <path class="px-laptop-logo" d="M15 23h2v2h-2z" />
+          </g>
+
+          <!-- Pixel Floating Zzz (Sleeping state) -->
+          <g class="layer-zzz">
+            <path
+              class="px-zzz zzz-1"
+              d="M25 8h3v1h-3z M26 9h1v1h-1z M25 10h3v1h-3z"
+            />
+            <path
+              class="px-zzz zzz-2"
+              d="M27 2h4v1h-4z M29 3h1v1h-1z M28 4h1v1h-1z M27 5h4v1h-4z"
+            />
+          </g>
+        </svg>
+      </div>
+
+      <!-- Custom Right-Click Context Menu -->
+      <nav id="context-menu" class="context-menu hidden" aria-label="Catffeine Controls">
+        <div class="menu-section-title">Stay Awake</div>
+        <button type="button" class="menu-item" data-policy="indefinite">
+          <span class="menu-check"></span>
+          <span>Indefinite</span>
+        </button>
+        <button type="button" class="menu-item" data-policy="30m">
+          <span class="menu-check"></span>
+          <span>30 Minutes</span>
+        </button>
+        <button type="button" class="menu-item" data-policy="1h">
+          <span class="menu-check"></span>
+          <span>1 Hour</span>
+        </button>
+        <button type="button" class="menu-item" data-policy="2h">
+          <span class="menu-check"></span>
+          <span>2 Hours</span>
+        </button>
+        <button type="button" class="menu-item" data-policy="off">
+          <span class="menu-check"></span>
+          <span>Off (Allow Sleep)</span>
+        </button>
+
+        <div class="menu-divider"></div>
+        <div class="menu-section-title">Position &amp; Pin</div>
+        <button type="button" class="menu-item" data-position="free-drag">
+          <span class="menu-check"></span>
+          <span>Unpin &amp; Move</span>
+        </button>
+        <button type="button" class="menu-item" data-position="pinned">
+          <span class="menu-check"></span>
+          <span>Pin Here (Lock)</span>
+        </button>
+        <button type="button" class="menu-item" data-position="bottom-right">
+          <span class="menu-check"></span>
+          <span>Bottom Right</span>
+        </button>
+        <button type="button" class="menu-item" data-position="bottom-left">
+          <span class="menu-check"></span>
+          <span>Bottom Left</span>
+        </button>
+
+        <div class="menu-divider"></div>
+        <button type="button" class="menu-item" id="menu-always-on-top">
+          <span class="menu-check" id="check-always-on-top"></span>
+          <span>Always on Top</span>
+        </button>
+        <button type="button" class="menu-item" id="menu-toggle-visible">
+          <span class="menu-check"></span>
+          <span id="menu-toggle-visible-label">Hide Cat</span>
+        </button>
+
+        <div class="menu-divider"></div>
+        <button type="button" class="menu-item menu-item-danger" id="menu-quit">
+          <span class="menu-check"></span>
+          <span>Quit Catffeine</span>
+        </button>
+      </nav>
+    </main>
+
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

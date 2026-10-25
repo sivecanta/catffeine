@@ -1,0 +1,22 @@
+{
+  "name": "catffeine",
+  "private": true,
+  "version": "0.1.0",
+  "description": "A cozy cross-platform desktop companion cat and keep-awake utility",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc && vite build",
+    "build:win": "tauri build --runner cargo-xwin --target x86_64-pc-windows-msvc --no-bundle && cp -f src-tauri/target/x86_64-pc-windows-msvc/release/catffeine.exe ./catffeine.exe",
+    "preview": "vite preview",
+    "tauri": "tauri"
+  },
+  "dependencies": {
+    "@tauri-apps/api": "^2.2.0"
+  },
+  "devDependencies": {
+    "@tauri-apps/cli": "^2.2.0",
+    "typescript": "^5.7.2",
+    "vite": "^6.0.5"
+  }
+}

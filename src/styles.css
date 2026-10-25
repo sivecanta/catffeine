@@ -1,0 +1,521 @@
+:root {
+  --px-outline: #231619;
+  --px-fur: #f49d52;
+  --px-fur-light: #fbd19b;
+  --px-fur-dark: #d4653b;
+  --px-belly: #fdf0d5;
+  --px-pink: #f27d85;
+  --px-cheek: #f4727f;
+  --px-mug: #e63946;
+  --px-mug-light: #ff758f;
+  --px-coffee: #4a2c2a;
+  --px-laptop-lid: #2b2d42;
+  --px-laptop-base: #8d99ae;
+  --px-laptop-logo: #72efdd;
+  font-family: "Courier New", Consolas, monospace, -apple-system, BlinkMacSystemFont, sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+html,
+body {
+  width: 100vw;
+  height: 100vh;
+  background: transparent !important;
+  overflow: hidden;
+}
+
+.app-root {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-end;
+  padding-bottom: 6px;
+  background: transparent;
+}
+
+/* Unhide Mini-Pill (shown when cat is hidden) */
+.unhide-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: 4px;
+  background: rgba(24, 20, 28, 0.92);
+  color: #fde68a;
+  font-family: inherit;
+  font-size: 11px;
+  font-weight: 700;
+  border: 2px solid #564964;
+  box-shadow: 0 3px 0 rgba(0, 0, 0, 0.45);
+  cursor: pointer;
+  pointer-events: auto;
+}
+
+.unhide-btn:hover {
+  background: rgba(40, 34, 48, 0.98);
+  border-color: #f59e0b;
+}
+
+/* Pixel-styled Status Pill */
+.status-banner {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 9px;
+  border-radius: 4px;
+  background: rgba(24, 20, 28, 0.9);
+  color: #f8f9fa;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  border: 2px solid #4a3f55;
+  box-shadow: 0 3px 0 rgba(0, 0, 0, 0.45);
+  margin-bottom: 4px;
+  pointer-events: auto;
+}
+
+.quick-pin-btn {
+  padding: 1px 5px;
+  border-radius: 3px;
+  border: 1px solid #f59e0b;
+  background: rgba(245, 158, 11, 0.2);
+  color: #fde68a;
+  font-family: inherit;
+  font-size: 10px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.quick-pin-btn:hover {
+  background: rgba(245, 158, 11, 0.4);
+}
+
+.status-dot {
+  width: 6px;
+  height: 6px;
+  background: #64748b;
+}
+
+.app-root[data-state="sleeping"] .status-dot {
+  background: #64748b;
+}
+
+.app-root[data-state="awake"] .status-dot {
+  background: #4ade80;
+  box-shadow: 0 0 6px #4ade80;
+}
+
+.app-root[data-state="working"] .status-dot {
+  background: #f59e0b;
+  box-shadow: 0 0 6px #f59e0b;
+  animation: px-blink-dot 0.6s steps(2, end) infinite;
+}
+
+.timer-badge {
+  padding: 1px 4px;
+  border-radius: 2px;
+  background: rgba(255, 255, 255, 0.14);
+  font-variant-numeric: tabular-nums;
+  font-size: 10px;
+  color: #fde68a;
+}
+
+.hidden {
+  display: none !important;
+}
+
+/* Interactive Pixel Cat Hitbox (32x30 @ 5x = 160x150) */
+.cat-hitbox {
+  position: relative;
+  width: 160px;
+  height: 150px;
+  cursor: pointer;
+  pointer-events: auto;
+  outline: none;
+}
+
+.app-root[data-position="free-drag"] .cat-hitbox {
+  cursor: grab;
+}
+
+.app-root[data-position="free-drag"] .cat-hitbox:active {
+  cursor: grabbing;
+}
+
+.cat-svg {
+  width: 160px;
+  height: 150px;
+  overflow: visible;
+  image-rendering: pixelated;
+  image-rendering: crisp-edges;
+}
+
+/* Pixel Palette Fills */
+.px-shadow {
+  fill: rgba(0, 0, 0, 0.28);
+}
+
+.px-outline {
+  fill: var(--px-outline);
+}
+
+.px-fur {
+  fill: var(--px-fur);
+}
+
+.px-fur-light {
+  fill: var(--px-fur-light);
+}
+
+.px-fur-dark {
+  fill: var(--px-fur-dark);
+}
+
+.px-belly {
+  fill: var(--px-belly);
+}
+
+.px-pink {
+  fill: var(--px-pink);
+}
+
+.px-cheek {
+  fill: var(--px-cheek);
+  opacity: 0.75;
+}
+
+.px-whisker {
+  fill: var(--px-outline);
+}
+
+.px-white {
+  fill: #ffffff;
+}
+
+.px-glasses-frame {
+  fill: #1d3557;
+}
+
+.px-glasses-lens {
+  fill: rgba(114, 239, 221, 0.42);
+}
+
+.px-mug {
+  fill: var(--px-mug);
+}
+
+.px-mug-light {
+  fill: var(--px-mug-light);
+}
+
+.px-coffee {
+  fill: var(--px-coffee);
+}
+
+.px-steam {
+  fill: rgba(255, 255, 255, 0.85);
+}
+
+.px-laptop-lid {
+  fill: var(--px-laptop-lid);
+}
+
+.px-laptop-base {
+  fill: var(--px-laptop-base);
+}
+
+.px-laptop-logo {
+  fill: var(--px-laptop-logo);
+}
+
+.px-zzz {
+  fill: #cbd5e1;
+}
+
+/* ==================================================
+   PIXEL STATE MACHINE LAYER VISIBILITY & ANIMATIONS
+   ================================================== */
+
+/* 1. SLEEPING STATE */
+.app-root[data-state="sleeping"] .eyes-open,
+.app-root[data-state="sleeping"] .cat-glasses,
+.app-root[data-state="sleeping"] .coffee-mug,
+.app-root[data-state="sleeping"] .mini-laptop,
+.app-root[data-state="sleeping"] .layer-steam {
+  display: none;
+}
+
+.app-root[data-state="sleeping"] .cat-head-group {
+  transform: translateY(2px);
+  animation: px-sleep-head 2.4s steps(2, end) infinite;
+}
+
+.app-root[data-state="sleeping"] .zzz-1 {
+  animation: px-zzz-1 2.4s steps(3, end) infinite;
+}
+
+.app-root[data-state="sleeping"] .zzz-2 {
+  animation: px-zzz-2 2.4s steps(3, end) infinite;
+}
+
+/* 2. AWAKE STATE */
+.app-root[data-state="awake"] .eyes-closed,
+.app-root[data-state="awake"] .cat-glasses,
+.app-root[data-state="awake"] .mini-laptop,
+.app-root[data-state="awake"] .layer-zzz {
+  display: none;
+}
+
+.app-root[data-state="awake"] .cat-head-group {
+  animation: px-awake-bob 1.6s steps(2, end) infinite;
+}
+
+.app-root[data-state="awake"] .cat-tail {
+  animation: px-tail-wag 1.2s steps(2, end) infinite;
+}
+
+.app-root[data-state="awake"] .steam-1,
+.app-root[data-state="working"] .steam-1 {
+  animation: px-steam-rise 1.2s steps(2, end) infinite;
+}
+
+.app-root[data-state="awake"] .steam-2,
+.app-root[data-state="working"] .steam-2 {
+  animation: px-steam-rise 1.2s steps(2, end) 0.6s infinite;
+}
+
+/* 3. WORKING STATE (Agent active) */
+.app-root[data-state="working"] .eyes-closed,
+.app-root[data-state="working"] .layer-zzz {
+  display: none;
+}
+
+.app-root[data-state="working"] .cat-head-group {
+  animation: px-work-head 0.5s steps(2, end) infinite;
+}
+
+.app-root[data-state="working"] .cat-tail {
+  animation: px-tail-wag 0.5s steps(2, end) infinite;
+}
+
+.app-root[data-state="working"] .paw-left {
+  animation: px-paw-left 0.24s steps(2, end) infinite;
+}
+
+.app-root[data-state="working"] .paw-right {
+  animation: px-paw-right 0.24s steps(2, end) infinite;
+}
+
+.app-root[data-state="working"] .px-laptop-logo {
+  animation: px-blink-dot 0.5s steps(2, end) infinite;
+}
+
+/* Context Menu */
+.context-menu {
+  position: fixed;
+  top: 4px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 204px;
+  background: rgba(22, 19, 28, 0.96);
+  border: 2px solid #564964;
+  border-radius: 6px;
+  padding: 5px;
+  box-shadow: 0 8px 0 rgba(0, 0, 0, 0.45);
+  z-index: 100;
+  pointer-events: auto;
+}
+
+.menu-section-title {
+  font-size: 9px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: #94a3b8;
+  padding: 2px 8px 1px;
+}
+
+.menu-item {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 3px 8px;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+  color: #f1f5f9;
+  font-family: inherit;
+  font-size: 11px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.menu-item:hover {
+  background: rgba(255, 255, 255, 0.14);
+}
+
+.menu-item.active {
+  color: #fde68a;
+  font-weight: 700;
+}
+
+.menu-check {
+  width: 12px;
+  display: inline-block;
+  text-align: center;
+  font-size: 10px;
+}
+
+.menu-item.active .menu-check::before {
+  content: "■";
+  color: #f59e0b;
+}
+
+.menu-divider {
+  height: 2px;
+  background: rgba(255, 255, 255, 0.1);
+  margin: 3px 0;
+}
+
+.menu-item-danger {
+  color: #fca5a5;
+}
+
+.menu-item-danger:hover {
+  background: rgba(239, 68, 68, 0.25);
+}
+
+/* Stepped Pixel Keyframes */
+@keyframes px-sleep-head {
+  0%,
+  100% {
+    transform: translateY(2px);
+  }
+  50% {
+    transform: translateY(3px);
+  }
+}
+
+@keyframes px-awake-bob {
+  0%,
+  100% {
+    transform: translateY(0px);
+  }
+  50% {
+    transform: translateY(-1px);
+  }
+}
+
+@keyframes px-work-head {
+  0%,
+  100% {
+    transform: translateY(1px);
+  }
+  50% {
+    transform: translateY(0px);
+  }
+}
+
+@keyframes px-tail-wag {
+  0%,
+  100% {
+    transform: translateX(0px);
+  }
+  50% {
+    transform: translateX(1px) translateY(1px);
+  }
+}
+
+@keyframes px-paw-left {
+  0%,
+  100% {
+    transform: translateY(-2px);
+  }
+  50% {
+    transform: translateY(0px);
+  }
+}
+
+@keyframes px-paw-right {
+  0%,
+  100% {
+    transform: translateY(0px);
+  }
+  50% {
+    transform: translateY(-2px);
+  }
+}
+
+@keyframes px-steam-rise {
+  0%,
+  100% {
+    transform: translateY(0px);
+    opacity: 0.9;
+  }
+  50% {
+    transform: translateY(-1px);
+    opacity: 0.35;
+  }
+}
+
+@keyframes px-zzz-1 {
+  0% {
+    opacity: 0;
+    transform: translateY(1px);
+  }
+  33% {
+    opacity: 1;
+    transform: translateY(0px);
+  }
+  100% {
+    opacity: 0;
+    transform: translateY(-1px);
+  }
+}
+
+@keyframes px-zzz-2 {
+  0%,
+  33% {
+    opacity: 0;
+    transform: translateY(1px);
+  }
+  66% {
+    opacity: 1;
+    transform: translateY(0px);
+  }
+  100% {
+    opacity: 0;
+    transform: translateY(-1px);
+  }
+}
+
+@keyframes px-blink-dot {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.35;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
