@@ -1,49 +1,112 @@
 # Catffeine
 
-A cozy, lightweight cross-platform (macOS, Windows, Linux) pixel-art desktop companion cat that lives on your desktop, taskbar, or menu bar, preventing your computer from going to sleep indefinitely, on a timer (`30m` / `1h` / `2h`), or dynamically while long-running AI agents and CLI processes are active.
+A cozy, lightweight cross-platform (**Windows**, **macOS**, **Linux**) pixel-art desktop companion cat that lives on your desktop, Windows System Tray, or macOS Menu Bar — preventing your computer from going to sleep indefinitely, on a timer (`30m` / `1h` / `2h`), or dynamically while long-running AI agents and CLI processes are active.
 
-## Architecture
+---
 
-- **Framework**: Tauri v2 + Rust (`src-tauri/`)
-- **Frontend**: Vanilla TypeScript + Pixel-Art SVG/CSS (`src/`, `index.html`)
-- **Window**: Frameless, transparent, `alwaysOnTop: true` by default, `skipTaskbar: true`, with system tray (Windows) and menu bar (`ActivationPolicy::Accessory` on macOS) integration
+## Supported Platforms & Architectures
 
-### Core Modules
+| OS | Architecture | Artifact / Format | Sleep Prevention Mechanism |
+| :--- | :--- | :--- | :--- |
+| **Windows 10 / 11** | `x86_64` (64-bit) | `catffeine.exe` (Standalone portable binary) | Win32 `SetThreadExecutionState(ES_CONTINUOUS \| ES_SYSTEM_REQUIRED \| ES_DISPLAY_REQUIRED)` |
+| **macOS** | `aarch64` (Apple Silicon) & `x86_64` (Intel) | `Catffeine.app` / `.dmg` | Spawns and supervises `/usr/bin/caffeinate -di` |
+| **Linux** | `x86_64` (64-bit) | Binary / `.deb` / `.AppImage` | Freedesktop D-Bus `org.freedesktop.ScreenSaver` / `PowerManagement` |
 
-1. **OS Power Management (`src-tauri/src/power.rs`)**
-   - `PowerManager::prevent_sleep()` / `PowerManager::allow_sleep()`
-   - **Windows**: `windows-sys` (`SetThreadExecutionState(ES_CONTINUOUS | ES_SYSTEM_REQUIRED | ES_DISPLAY_REQUIRED)`) executed on a dedicated OS thread.
-   - **macOS**: Spawns and supervises a `/usr/bin/caffeinate -di` child process.
-   - **Linux**: Acquires and releases a Freedesktop ScreenSaver / PowerManagement inhibition cookie over D-Bus (`zbus`).
+---
 
-2. **Window Positioning, Dragging & Pinning (`src-tauri/src/positioning.rs`)**
-   - Queries monitor geometry (`window.current_monitor()`) and HiDPI scale factor.
-   - Modes: **Bottom Right**, **Bottom Left**, **Unpin & Move (`free-drag`)**, and **Pin Here (`pinned`)** to lock the cat at any custom screen coordinate.
-   - Controllable via the right-click context menu on the cat and the OS system tray / menu bar icon.
+## Quick Start: Download from GitHub Releases
 
-3. **Agent / Process Watcher HTTP IPC (`src-tauri/src/watcher.rs`)**
-   - Lightweight loopback HTTP server on `127.0.0.1:41905` (configurable via `CATFFEINE_PORT`):
-     - `POST http://127.0.0.1:41905/agent/start` — Increments active job counter, forces Keep-Awake ON, switches cat to `"working"` animation.
-     - `POST http://127.0.0.1:41905/agent/stop` — Decrements job counter; when count hits `0`, restores the user's selected sleep policy and transitions back to `"sleeping"` or `"awake"`.
-     - `POST http://127.0.0.1:41905/window/show` — Unhides and brings the Catffeine window to the front.
-     - `POST http://127.0.0.1:41905/window/hide` — Hides the cat into the system tray / mini-pill mode.
-     - `GET http://127.0.0.1:41905/status` — Returns JSON state snapshot (`AppStateSnapshot`).
+1. Go to the [**Releases**](../../releases) page and download the binary for your platform:
+   - **Windows (`x86_64`, 64-bit)**: Download `catffeine.exe`.
+   - **macOS**: Download `Catffeine.dmg` / `Catffeine.app`.
 
-4. **Frontend Pixel-Art State Machine (`src/main.ts`, `src/styles.css`, `index.html`)**
-   - Visual states: `sleeping` (keep-awake OFF), `awake` (keep-awake ON), `working` (agent running with coding glasses & laptop).
-   - Hide / Unhide support via right-click menu, left-clicking the Windows system tray / macOS menu bar icon, or the compact `Show Cat` pill.
+### Running Unsigned Release Binaries
 
-## Development & Building
+Because release binaries are community-built without a paid EV / Apple Developer ID certificate, your OS may flag files downloaded via a web browser:
 
+- **Windows 10 / 11 (SmartScreen / Smart App Control)**:
+  - Before double-clicking a downloaded `catffeine.exe`, unblock the browser's Mark-of-the-Web in PowerShell:
+    ```powershell
+    Unblock-File -Path .\catffeine.exe
+    ```
+  - Or if running from WSL, launch it directly from the terminal (`./catffeine.exe`) or copy it via raw bytes:
+    ```powershell
+    [IO.File]::WriteAllBytes("$HOME\Desktop\catffeine.exe", [IO.File]::ReadAllBytes("\\wsl.localhost\Ubuntu\home\kaizen\projects\git\catffeine\catffeine.exe"))
+    ```
+- **macOS (Gatekeeper)**:
+  - Clear the quarantine attribute once in Terminal before opening:
+    ```bash
+    xattr -cr /Applications/Catffeine.app
+    ```
+
+---
+
+## Launching & Building from Terminal
+
+### 1. Run in Development Mode
 ```bash
 npm install
 npm run tauri dev
+```
 
-# Run checks & unit tests
+### 2. Build Standalone Windows `.exe` (`x86_64-pc-windows-msvc`) from WSL / Linux
+```bash
+npm run build:win
+```
+This cross-compiles the optimized standalone Windows executable to `./catffeine.exe` (and `src-tauri/target/x86_64-pc-windows-msvc/release/catffeine.exe`).
+
+You can launch it directly from your WSL or Windows terminal:
+```bash
+./catffeine.exe
+```
+
+### 3. Build Native Release Bundle (macOS / Linux / Windows)
+```bash
+npx tauri build
+```
+
+---
+
+## Controls & Features
+
+- **Left-Click on Cat**: Toggle between **Sleeping** (`off`) and **Staying Awake** (`indefinite`).
+- **Right-Click on Cat (or System Tray / Menu Bar Icon)**:
+  - **Stay Awake**: `Indefinite` / `30 Minutes` / `1 Hour` / `2 Hours` / `Off (Allow Sleep)`
+  - **Position & Pin**:
+    - `Unpin & Move`: Drag the cat anywhere on your screen.
+    - `Pin Here (Lock)`: Lock the cat at its current custom screen coordinates (also available via the one-click **`Pin Here`** badge while in Free Drag mode).
+    - `Bottom Right` / `Bottom Left`: Snap above the taskbar/dock corners.
+  - **Always on Top**: Keep the cat floating above all windows (enabled by default).
+  - **Launch on Startup**: Automatically start Catffeine when you log into Windows (`HKCU\...\Run` via `%LOCALAPPDATA%\Catffeine\catffeine.exe`), macOS (`~/Library/LaunchAgents/com.catffeine.desktop.plist`), or Linux (`~/.config/autostart/catffeine.desktop`).
+  - **Hide / Show Cat**: Hide the desktop window into the Windows System Tray / macOS Menu Bar. Left-click the tray/menu-bar cat icon (or click `Show Cat`) to unhide anytime.
+
+---
+
+## Agent / CLI Watcher HTTP API (`127.0.0.1:41905`)
+
+Catffeine runs a lightweight loopback HTTP listener on `127.0.0.1:41905` (override port with `CATFFEINE_PORT`) so AI agents and long-running CLI scripts can automatically keep your computer awake while they work:
+
+```bash
+# Start an active agent job (forces Keep-Awake ON + switches cat to "Working" with glasses & laptop)
+curl -X POST http://127.0.0.1:41905/agent/start
+
+# Stop an active agent job (restores user's sleep policy when active_agents reaches 0)
+curl -X POST http://127.0.0.1:41905/agent/stop
+
+# Show or hide the cat window from terminal
+curl -X POST http://127.0.0.1:41905/window/show
+curl -X POST http://127.0.0.1:41905/window/hide
+
+# Query current state snapshot (JSON)
+curl http://127.0.0.1:41905/status
+```
+
+---
+
+## Verification & Tests
+
+```bash
 npm run build
 cargo test --manifest-path src-tauri/Cargo.toml
 cargo clippy --manifest-path src-tauri/Cargo.toml -- -D warnings
-
-# Cross-compile standalone Windows catffeine.exe from WSL
-npm run build:win
 ```
