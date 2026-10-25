@@ -1,15 +1,12 @@
 name: Release (Windows, macOS, Linux)
 
 on:
-  push:
-    tags:
-      - 'v*'
   workflow_dispatch:
     inputs:
       tag:
-        description: 'Pre-release tag (e.g. v0.1.0-alpha.1 or v0.1.0)'
+        description: "Pre-release tag (e.g. v0.1.0)"
         required: true
-        default: 'v0.1.0-alpha.1'
+        default: "v0.1.0"
 
 permissions:
   contents: write
@@ -65,7 +62,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           tagName: ${{ github.ref_type == 'tag' && github.ref_name || inputs.tag }}
-          releaseName: 'Catffeine ${{ github.ref_type == 'tag' && github.ref_name || inputs.tag }} (Pre-release)'
+          releaseName: "Catffeine ${{ github.ref_type == 'tag' && github.ref_name || inputs.tag }} (Pre-release)"
           releaseBody: |
             A cozy, lightweight pixel-art desktop companion cat that lives on your desktop, Windows System Tray, or macOS Menu Bar — keeping your computer awake indefinitely, on a timer (`30m` / `1h` / `2h`), or automatically while AI agents and CLI tasks are running.
 
