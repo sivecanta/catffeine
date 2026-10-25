@@ -1,10 +1,13 @@
 //! Cross-platform Launch-on-Startup (Autostart) manager for Catffeine.
 //!
 //! Uses native OS mechanisms with zero external crate bloat:
-//! - **Windows**: `HKCU\Software\Microsoft\Windows\CurrentVersion\Run` registry value (`Catffeine`).
+//! - **Windows**: Copies the binary cleanly via raw byte stream to `%LOCALAPPDATA%\Catffeine\catffeine.exe`
+//!   (avoiding WSL UNC paths at boot and Explorer Mark-of-the-Web attributes) and registers it in
+//!   `HKCU\Software\Microsoft\Windows\CurrentVersion\Run` (`Catffeine`).
 //! - **macOS**: `~/Library/LaunchAgents/com.catffeine.desktop.plist` LaunchAgent.
 //! - **Linux**: `${XDG_CONFIG_HOME:-~/.config}/autostart/catffeine.desktop` XDG autostart entry.
 
+#[cfg(not(target_os = "windows"))]
 use std::path::PathBuf;
 
 /// Strips Windows extended-length path prefixes (`\\?\UNC\` or `\\?\`) for registry `Run` commands.
@@ -52,6 +55,7 @@ pub fn format_linux_desktop_entry(exe_path: &str) -> String {
     )
 }
 
+#[cfg(not(target_os = "windows"))]
 fn current_exe_string() -> Result<String, String> {
     let exe: PathBuf =
         std::env::current_exe().map_err(|e| format!("Failed to resolve current_exe: {e}"))?;
@@ -79,7 +83,7 @@ pub fn set_launch_on_start(enabled: bool) -> Result<bool, String> {
     #[cfg(target_os = "windows")]
     {
         if enabled {
-            let exe = current_exe_string()?;
+            let exe = windows_autostart::prepare_local_autostart_exe()?;
             windows_autostart::enable(&exe)?;
         } else {
             windows_autostart::disable()?;
@@ -144,17 +148,48 @@ fn linux_autostart_path() -> Option<PathBuf> {
 
 #[cfg(target_os = "windows")]
 mod windows_autostart {
+    #[cfg(not(target_os = "windows"))]
+use std::path::PathBuf;
     use windows_sys::Win32::Foundation::ERROR_SUCCESS;
     use windows_sys::Win32::System::Registry::{
         RegCloseKey, RegDeleteValueW, RegOpenKeyExW, RegQueryValueExW, RegSetValueExW,
         HKEY_CURRENT_USER, KEY_QUERY_VALUE, KEY_SET_VALUE, REG_SZ,
     };
 
+    use super::normalize_exe_path;
+
     const RUN_SUBKEY: &str = "Software\\Microsoft\\Windows\\CurrentVersion\\Run\0";
     const VALUE_NAME: &str = "Catffeine\0";
 
     fn wide_null(s: &str) -> Vec<u16> {
         s.encode_utf16().collect()
+    }
+
+    /// Ensures the autostart executable lives on the local Windows NTFS drive
+    /// (`%LOCALAPPDATA%\Catffeine\catffeine.exe`) written via raw byte stream
+    /// so it works at Windows login before WSL boots and without Explorer MOTW tags.
+    pub fn prepare_local_autostart_exe() -> Result<String, String> {
+        let current =
+            std::env::current_exe().map_err(|e| format!("Failed to resolve current_exe: {e}"))?;
+
+        if let Some(local_app_data) = std::env::var_os("LOCALAPPDATA") {
+            let install_dir = PathBuf::from(local_app_data).join("Catffeine");
+            let target_exe = install_dir.join("catffeine.exe");
+
+            if current != target_exe && std::fs::create_dir_all(&install_dir).is_ok() {
+                if let Ok(bytes) = std::fs::read(&current) {
+                    let _ = std::fs::remove_file(&target_exe);
+                    if std::fs::write(&target_exe, bytes).is_ok() {
+                        return Ok(normalize_exe_path(&target_exe.to_string_lossy()));
+                    }
+                }
+            }
+            if target_exe.exists() {
+                return Ok(normalize_exe_path(&target_exe.to_string_lossy()));
+            }
+        }
+
+        Ok(normalize_exe_path(&current.to_string_lossy()))
     }
 
     pub fn is_enabled() -> bool {
