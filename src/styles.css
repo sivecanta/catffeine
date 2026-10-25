@@ -100,6 +100,86 @@ body {
   background: rgba(245, 158, 11, 0.4);
 }
 
+/* Hoverable Track Button & Popover */
+.track-wrapper {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+}
+
+.track-btn {
+  padding: 1px 6px;
+  border-radius: 3px;
+  border: 1px solid #64748b;
+  background: rgba(100, 116, 139, 0.22);
+  color: #e2e8f0;
+  font-family: inherit;
+  font-size: 10px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.track-btn:hover,
+.track-btn.active {
+  border-color: #38bdf8;
+  background: rgba(56, 189, 248, 0.22);
+  color: #bae6fd;
+}
+
+.track-menu {
+  display: none;
+  position: absolute;
+  bottom: 100%;
+  left: 50%;
+  transform: translateX(-50%);
+  padding-bottom: 5px;
+  z-index: 90;
+}
+
+.track-wrapper:hover .track-menu,
+.track-wrapper:focus-within .track-menu {
+  display: flex;
+  flex-direction: column;
+  background: rgba(22, 19, 28, 0.97);
+  border: 2px solid #564964;
+  border-radius: 5px;
+  padding: 4px;
+  min-width: 118px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.6);
+  margin-bottom: 2px;
+}
+
+.track-item {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 6px;
+  border: none;
+  border-radius: 3px;
+  background: transparent;
+  color: #f1f5f9;
+  font-family: inherit;
+  font-size: 10px;
+  text-align: left;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.track-item:hover {
+  background: rgba(255, 255, 255, 0.14);
+}
+
+.track-item.active {
+  color: #fde68a;
+  font-weight: 700;
+}
+
+.track-item.active .menu-check::before {
+  content: "■";
+  color: #38bdf8;
+}
+
 .status-dot {
   width: 6px;
   height: 6px;

@@ -1,6 +1,7 @@
 pub mod autostart;
 pub mod positioning;
 pub mod power;
+pub mod tracker;
 pub mod watcher;
 
 use std::sync::Mutex;
@@ -16,6 +17,7 @@ use tauri::{AppHandle, Emitter, Manager, WebviewWindow};
 use crate::autostart::{is_launch_on_start_enabled, set_launch_on_start as apply_os_autostart};
 use crate::positioning::{apply_dock_position, DockPosition};
 use crate::power::PowerManager;
+use crate::tracker::{is_tracked_agent_busy, TrackedAgent};
 use crate::watcher::{resolve_watcher_port, spawn_watcher_server};
 
 /// Visual and behavioral state of the companion cat.
@@ -67,6 +69,8 @@ pub struct AppStateSnapshot {
     pub always_on_top: bool,
     pub launch_on_start: bool,
     pub cat_visible: bool,
+    pub tracked_agent: TrackedAgent,
+    pub tracked_agent_busy: bool,
     pub active_agents: u32,
     pub preventing_sleep: bool,
     pub remaining_seconds: Option<u64>,
@@ -82,6 +86,8 @@ pub struct AppStateInner {
     pub always_on_top: bool,
     pub launch_on_start: bool,
     pub cat_visible: bool,
+    pub tracked_agent: TrackedAgent,
+    pub tracked_agent_busy: bool,
     pub active_agents: u32,
     pub watcher_port: u16,
 }
@@ -102,6 +108,8 @@ impl AppStateInner {
             always_on_top: true,
             launch_on_start: false,
             cat_visible: true,
+            tracked_agent: TrackedAgent::None,
+            tracked_agent_busy: false,
             active_agents: 0,
             watcher_port,
         }
@@ -126,6 +134,7 @@ impl AppStateInner {
 
     pub fn reset_for_quit(&mut self) {
         self.active_agents = 0;
+        self.tracked_agent_busy = false;
         self.set_policy(StayAwakePolicy::Off);
     }
 
@@ -143,7 +152,9 @@ impl AppStateInner {
             }
         }
 
-        let cat_state = if self.active_agents > 0 {
+        let total_agents = self.active_agents + u32::from(self.tracked_agent_busy);
+
+        let cat_state = if total_agents > 0 {
             CatState::Working
         } else if self.policy.is_active() {
             CatState::Awake
@@ -174,7 +185,9 @@ impl AppStateInner {
             always_on_top: self.always_on_top,
             launch_on_start: self.launch_on_start,
             cat_visible: self.cat_visible,
-            active_agents: self.active_agents,
+            tracked_agent: self.tracked_agent,
+            tracked_agent_busy: self.tracked_agent_busy,
+            active_agents: total_agents,
             preventing_sleep: self.power.is_preventing_sleep(),
             remaining_seconds,
             watcher_port: self.watcher_port,
@@ -313,6 +326,15 @@ fn set_launch_on_start(app: AppHandle, enabled: bool) -> Result<AppStateSnapshot
 #[tauri::command]
 fn set_cat_visible(app: AppHandle, window: WebviewWindow, visible: bool) -> AppStateSnapshot {
     apply_cat_visible_and_sync(&app, Some(&window), visible)
+}
+
+#[tauri::command]
+fn set_tracked_agent(app: AppHandle, agent: TrackedAgent) -> AppStateSnapshot {
+    let busy = is_tracked_agent_busy(agent);
+    sync_and_broadcast_state(&app, |inner| {
+        inner.tracked_agent = agent;
+        inner.tracked_agent_busy = busy;
+    })
 }
 
 #[tauri::command]
@@ -469,13 +491,44 @@ fn spawn_timer_worker(app: AppHandle) {
         let mut interval = tokio::time::interval(Duration::from_secs(1));
         loop {
             interval.tick().await;
-            let maybe_snapshot = {
+            let tracked = {
+                let state = app.state::<AppState>();
+                let inner = state.0.lock().expect("AppState mutex poisoned");
+                inner.tracked_agent
+            };
+
+            let next_busy = if tracked != TrackedAgent::None {
+                is_tracked_agent_busy(tracked)
+            } else {
+                false
+            };
+
+            let maybe_events = {
                 let state = app.state::<AppState>();
                 let mut inner = state.0.lock().expect("AppState mutex poisoned");
-                inner.policy_expires_at.map(|_| inner.reconcile())
+                let prev_busy = inner.tracked_agent_busy;
+                let busy_changed = prev_busy != next_busy;
+                if busy_changed {
+                    inner.tracked_agent_busy = next_busy;
+                }
+                let finished_agent = if prev_busy && !next_busy && inner.tracked_agent != TrackedAgent::None {
+                    Some(inner.tracked_agent.display_name().to_string())
+                } else {
+                    None
+                };
+
+                if busy_changed || inner.policy_expires_at.is_some() {
+                    Some((inner.reconcile(), finished_agent))
+                } else {
+                    None
+                }
             };
-            if let Some(snapshot) = maybe_snapshot {
+
+            if let Some((snapshot, finished_agent)) = maybe_events {
                 let _ = app.emit("catffeine://state-changed", &snapshot);
+                if let Some(agent_name) = finished_agent {
+                    let _ = app.emit("catffeine://tracked-agent-done", &agent_name);
+                }
             }
         }
     });
@@ -515,6 +568,7 @@ pub fn run() {
             set_always_on_top,
             set_launch_on_start,
             set_cat_visible,
+            set_tracked_agent,
             set_ignore_cursor_events,
             agent_start,
             agent_stop,

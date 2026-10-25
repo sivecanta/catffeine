@@ -19,11 +19,42 @@
         <span>Show Cat</span>
       </button>
 
-      <!-- Status pill & timer / agent badge + quick Pin button when in Free Drag -->
+      <!-- Status pill & timer / agent badge + Track dropdown + quick Pin button -->
       <div id="status-banner" class="status-banner" aria-live="polite">
         <span id="status-dot" class="status-dot"></span>
         <span id="status-label" class="status-label">Sleeping</span>
         <span id="timer-badge" class="timer-badge hidden"></span>
+
+        <!-- Hoverable Track Agent Selector (single-select) -->
+        <div class="track-wrapper" id="track-wrapper">
+          <button
+            type="button"
+            id="track-btn"
+            class="track-btn"
+            title="Hover to select an AI agent to track (meows when agent finishes)"
+          >
+            Track
+          </button>
+          <div class="track-menu" id="track-menu" role="menu" aria-label="Track AI Agent">
+            <button type="button" class="track-item" data-track="claude">
+              <span class="menu-check"></span>
+              <span>Claude</span>
+            </button>
+            <button type="button" class="track-item" data-track="codex">
+              <span class="menu-check"></span>
+              <span>Codex</span>
+            </button>
+            <button type="button" class="track-item" data-track="antigravity">
+              <span class="menu-check"></span>
+              <span>Antigravity</span>
+            </button>
+            <button type="button" class="track-item" data-track="cursor">
+              <span class="menu-check"></span>
+              <span>Cursor</span>
+            </button>
+          </div>
+        </div>
+
         <button
           type="button"
           id="quick-pin-btn"
