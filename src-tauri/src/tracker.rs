@@ -2,13 +2,16 @@
 //!
 //! Tracks a single user-selected agent and detects when it is actively working vs. finished
 //! across both native OS home directories (`USERPROFILE` / `HOME`) and WSL (`\\wsl.localhost\<distro>\home\<user>`):
-//! - **Antigravity**: Inspects `~/.gemini/antigravity/brain/*/.system_generated/logs/transcript.jsonl`
-//!   plus active `.system_generated/tasks/*.log` files.
-//! - **Cursor**: Inspects `~/.cursor/projects/*/agent-transcripts/**/*.jsonl` (both on Windows/macOS/Linux
-//!   and inside WSL!). Cursor writes `{"role":"user",...}`, then `{"role":"assistant",...}` (with `tool_use`),
-//!   and finally writes an explicit **`{"type":"turn_ended","status":"..."}`** line ONLY when the entire
-//!   agent turn has finished!
-//! - **Claude (`Claude Code`)**: Inspects `~/.claude/projects/**/*.jsonl` across native + WSL homes.
+//! - **Antigravity**: Inspects ALL recently active `~/.gemini/antigravity/brain/*/.system_generated/logs/transcript.jsonl`
+//!   files (main conversation + any subagents) plus `.system_generated/tasks/*.log` files.
+//! - **Cursor**: Inspects ALL recently active `~/.cursor/projects/*/agent-transcripts/**/*.jsonl` files
+//!   (both the parent conversation AND all `subagents/*.jsonl`).
+//!   When a Cursor parent agent spawns subagents (`T1`, `T2`, `T3`), individual subagents write
+//!   `{"type":"turn_ended"}` as they finish, while the **parent** transcript (`<id>/<id>.jsonl`) and
+//!   remaining subagents do NOT have `{"type":"turn_ended"}` until the entire multi-agent job is done!
+//!   By checking whether **any** recent `.jsonl` transcript is still open (missing `turn_ended`),
+//!   Cursor stays `Working` across all subagent completions until the parent turn itself ends!
+//! - **Claude (`Claude Code`)**: Inspects ALL recent `~/.claude/projects/**/*.jsonl` files across native + WSL homes.
 //! - **Codex (`OpenAI Codex CLI`)**: Inspects `~/.codex` session logs across native + WSL homes.
 
 use std::path::{Path, PathBuf};
@@ -42,7 +45,7 @@ impl TrackedAgent {
 
 /// Pure classifier for the tail of an Antigravity `transcript.jsonl` file.
 pub fn is_antigravity_transcript_busy(tail_text: &str, age: Duration) -> bool {
-    if age > Duration::from_secs(600) {
+    if age > Duration::from_secs(1800) {
         return false;
     }
     if age <= Duration::from_secs(5) {
@@ -107,36 +110,42 @@ fn extract_running_task_id(line: &str) -> Option<&str> {
     }
 }
 
-/// Pure classifier for the last line of a Cursor `agent-transcripts/<id>/<id>.jsonl` file.
+/// Pure classifier for the last line of a Cursor `agent-transcripts/**/*.jsonl` file.
 ///
-/// Cursor appends:
-/// - `{"role":"user","message":...}` when a prompt starts
-/// - `{"role":"assistant","message":{"content":[{"type":"tool_use",...}]}}` for each tool call
-/// - `{"role":"assistant","message":{"content":[{"type":"text",...}]}}` for assistant text
-/// - `{"type":"turn_ended","status":"success"}` (or `"error"` / `"cancelled"` / `"aborted"`)
-///   ONLY when the entire agent turn has completed!
-///
-/// Therefore, a Cursor agent transcript is busy for the entire turn until `"type":"turn_ended"`
-/// is written as the final line!
+/// Cursor writes `{"type":"turn_ended","status":"success"}` ONLY when a transcript's turn has
+/// completely finished. When a parent agent spawns subagents (`T1`, `T2`, `T3`), the parent
+/// transcript remains on `{"role":"assistant",...}` (without `turn_ended`) for up to 30+ minutes
+/// while the subagents execute!
 pub fn is_cursor_transcript_busy(last_line: &str, age: Duration) -> bool {
-    if age > Duration::from_secs(600) {
+    if age > Duration::from_secs(3600) {
         return false;
     }
     let trimmed = last_line.trim();
     if trimmed.is_empty() {
         return false;
     }
-    // If the turn explicitly ended, it's NOT busy!
     if trimmed.contains(r#""type":"turn_ended""#) || trimmed.contains(r#""type": "turn_ended""#) {
         return false;
     }
-    // Otherwise (role: user, role: assistant with tool_use or text before turn_ended), the turn is STILL running!
     true
+}
+
+/// Pure classifier for a collection of Cursor transcript `(last_line, age)` pairs
+/// (e.g. parent conversation + spawned subagents).
+///
+/// Returns `true` if **any** transcript in the active session has not yet written `"turn_ended"`.
+pub fn is_any_cursor_transcript_busy<'a, I>(transcripts: I) -> bool
+where
+    I: IntoIterator<Item = (&'a str, Duration)>,
+{
+    transcripts
+        .into_iter()
+        .any(|(last_line, age)| is_cursor_transcript_busy(last_line, age))
 }
 
 /// Pure classifier for the last line of a Claude Code session `.jsonl` file.
 pub fn is_claude_transcript_busy(last_line: &str, age: Duration) -> bool {
-    if age > Duration::from_secs(600) {
+    if age > Duration::from_secs(1800) {
         return false;
     }
     if age <= Duration::from_secs(5) {
@@ -169,7 +178,7 @@ pub fn is_tracked_agent_busy(agent: TrackedAgent) -> bool {
 }
 
 /// Returns candidate home directories, including both native OS (`USERPROFILE` / `HOME`)
-/// and WSL home directories (`\\wsl.localhost\<distro>\home\<user>`) when running on Windows!
+/// and WSL home directories (`\\wsl.localhost\<distro>\home\<user>`) when running on Windows.
 fn candidate_home_dirs() -> Vec<PathBuf> {
     let mut homes = Vec::new();
 
@@ -183,8 +192,6 @@ fn candidate_home_dirs() -> Vec<PathBuf> {
         }
     }
 
-    // On Windows, also include WSL home directories so agents running in WSL workspaces
-    // (Cursor Remote-WSL, Claude Code in WSL, Codex in WSL) are tracked seamlessly!
     #[cfg(target_os = "windows")]
     if let Some(user) = homes
         .first()
@@ -248,7 +255,7 @@ fn check_antigravity_busy() -> bool {
                 continue;
             };
             let age = now.duration_since(modified).unwrap_or(Duration::MAX);
-            if age > Duration::from_secs(600) {
+            if age > Duration::from_secs(1800) {
                 continue;
             }
             if let Some(tail_text) = read_tail_text(&transcript, 65_536) {
@@ -267,39 +274,48 @@ fn check_antigravity_busy() -> bool {
     false
 }
 
-fn most_recent_file_age_under(
+/// Collects all files under `dir` (up to `max_depth`) modified within `max_age`.
+fn collect_recent_files_under(
     dir: &Path,
     max_depth: u8,
     now: SystemTime,
-) -> Option<(PathBuf, Duration)> {
+    max_age: Duration,
+    out: &mut Vec<(PathBuf, Duration)>,
+) {
     if max_depth == 0 || !dir.exists() {
-        return None;
+        return;
     }
-    let mut best: Option<(PathBuf, Duration)> = None;
-    let entries = std::fs::read_dir(dir).ok()?;
+    let Ok(entries) = std::fs::read_dir(dir) else {
+        return;
+    };
     for entry in entries.flatten() {
         let path = entry.path();
         let Ok(ft) = entry.file_type() else {
             continue;
         };
         if ft.is_dir() {
-            if let Some(sub) = most_recent_file_age_under(&path, max_depth - 1, now) {
-                if best.as_ref().is_none_or(|b| sub.1 < b.1) {
-                    best = Some(sub);
-                }
-            }
+            collect_recent_files_under(&path, max_depth - 1, now, max_age, out);
         } else if ft.is_file() {
             if let Ok(meta) = entry.metadata() {
                 if let Ok(modified) = meta.modified() {
                     let age = now.duration_since(modified).unwrap_or(Duration::MAX);
-                    if best.as_ref().is_none_or(|b| age < b.1) {
-                        best = Some((path, age));
+                    if age <= max_age {
+                        out.push((path, age));
                     }
                 }
             }
         }
     }
-    best
+}
+
+fn most_recent_file_age_under(
+    dir: &Path,
+    max_depth: u8,
+    now: SystemTime,
+) -> Option<(PathBuf, Duration)> {
+    let mut files = Vec::new();
+    collect_recent_files_under(dir, max_depth, now, Duration::MAX, &mut files);
+    files.into_iter().min_by_key(|(_, age)| *age)
 }
 
 fn check_cursor_busy() -> bool {
@@ -311,9 +327,17 @@ fn check_cursor_busy() -> bool {
         };
         for project in projects.flatten() {
             let transcripts_dir = project.path().join("agent-transcripts");
-            if let Some((path, age)) = most_recent_file_age_under(&transcripts_dir, 3, now) {
-                if age <= Duration::from_secs(600) && path.extension().is_some_and(|e| e == "jsonl")
-                {
+            let mut recent_files = Vec::new();
+            // Depth 4 covers both `agent-transcripts/<id>/<id>.jsonl` AND `agent-transcripts/<id>/subagents/<subid>.jsonl`!
+            collect_recent_files_under(
+                &transcripts_dir,
+                4,
+                now,
+                Duration::from_secs(3600),
+                &mut recent_files,
+            );
+            for (path, age) in recent_files {
+                if path.extension().is_some_and(|e| e == "jsonl") {
                     if let Some(last_line) = read_last_non_empty_line(&path) {
                         if is_cursor_transcript_busy(&last_line, age) {
                             return true;
@@ -330,10 +354,20 @@ fn check_claude_busy() -> bool {
     let now = SystemTime::now();
     for home in candidate_home_dirs() {
         let projects_dir = home.join(".claude").join("projects");
-        if let Some((path, age)) = most_recent_file_age_under(&projects_dir, 3, now) {
-            if let Some(last_line) = read_last_non_empty_line(&path) {
-                if is_claude_transcript_busy(&last_line, age) {
-                    return true;
+        let mut recent_files = Vec::new();
+        collect_recent_files_under(
+            &projects_dir,
+            4,
+            now,
+            Duration::from_secs(1800),
+            &mut recent_files,
+        );
+        for (path, age) in recent_files {
+            if path.extension().is_some_and(|e| e == "jsonl") {
+                if let Some(last_line) = read_last_non_empty_line(&path) {
+                    if is_claude_transcript_busy(&last_line, age) {
+                        return true;
+                    }
                 }
             }
         }
@@ -413,32 +447,35 @@ mod tests {
     }
 
     #[test]
-    fn cursor_transcript_busy_until_explicit_turn_ended_marker() {
-        let user_prompt = r#"{"role":"user","message":{"content":[{"type":"text","text":"proceed pls"}]}}"#;
-        assert!(is_cursor_transcript_busy(
-            user_prompt,
-            Duration::from_secs(60)
-        ));
+    fn cursor_stays_busy_when_subagent_completes_but_parent_or_other_subagent_is_running() {
+        // Parent transcript is waiting on subagents (no turn_ended yet, modified 11 mins ago)
+        let parent_last_line =
+            r#"{"role":"assistant","message":{"content":[{"type":"tool_use","name":"Task"}]}}"#;
+        // Subagent T1 just finished and wrote turn_ended (modified 1 sec ago)
+        let finished_subagent_t1 = r#"{"type":"turn_ended","status":"success"}"#;
+        // Subagent T2 is still running tests (modified 2 secs ago)
+        let running_subagent_t2 =
+            r#"{"role":"assistant","message":{"content":[{"type":"tool_use","name":"Shell"}]}}"#;
 
-        let assistant_tool_use =
-            r#"{"role":"assistant","message":{"content":[{"type":"tool_use","name":"Write"}]}}"#;
-        assert!(is_cursor_transcript_busy(
-            assistant_tool_use,
-            Duration::from_secs(90)
-        ));
+        // Even though T1 finished most recently, checking ALL transcripts keeps Cursor busy!
+        assert!(is_any_cursor_transcript_busy([
+            (finished_subagent_t1, Duration::from_secs(1)),
+            (running_subagent_t2, Duration::from_secs(2)),
+            (parent_last_line, Duration::from_secs(660)),
+        ]));
 
-        let assistant_text_before_turn_ended =
-            r#"{"role":"assistant","message":{"content":[{"type":"text","text":"Plan written."}]}}"#;
-        assert!(is_cursor_transcript_busy(
-            assistant_text_before_turn_ended,
-            Duration::from_secs(30)
-        ));
+        // Even if T1 and T2 both finished, parent is still open (hasn't written turn_ended yet):
+        assert!(is_any_cursor_transcript_busy([
+            (finished_subagent_t1, Duration::from_secs(5)),
+            (parent_last_line, Duration::from_secs(700)),
+        ]));
 
-        let turn_ended = r#"{"type":"turn_ended","status":"success"}"#;
-        assert!(!is_cursor_transcript_busy(
-            turn_ended,
-            Duration::from_secs(1)
-        ));
+        // Only when BOTH subagents AND the parent transcript have written turn_ended is Cursor done!
+        let finished_parent = r#"{"type":"turn_ended","status":"success"}"#;
+        assert!(!is_any_cursor_transcript_busy([
+            (finished_subagent_t1, Duration::from_secs(15)),
+            (finished_parent, Duration::from_secs(1)),
+        ]));
     }
 
     #[test]
