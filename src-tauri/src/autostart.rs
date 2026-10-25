@@ -148,8 +148,7 @@ fn linux_autostart_path() -> Option<PathBuf> {
 
 #[cfg(target_os = "windows")]
 mod windows_autostart {
-    #[cfg(not(target_os = "windows"))]
-use std::path::PathBuf;
+    use std::path::PathBuf;
     use windows_sys::Win32::Foundation::ERROR_SUCCESS;
     use windows_sys::Win32::System::Registry::{
         RegCloseKey, RegDeleteValueW, RegOpenKeyExW, RegQueryValueExW, RegSetValueExW,

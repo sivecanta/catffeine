@@ -160,6 +160,39 @@ body {
   image-rendering: crisp-edges;
 }
 
+.meow-bubble {
+  position: absolute;
+  top: -8px;
+  right: 8px;
+  padding: 2px 7px;
+  background: #fdf0d5;
+  color: #231619;
+  font-size: 11px;
+  font-weight: 700;
+  border: 2px solid #231619;
+  border-radius: 4px;
+  box-shadow: 0 2px 0 rgba(0, 0, 0, 0.35);
+  pointer-events: none;
+  z-index: 20;
+  animation: px-meow-pop 0.9s steps(4, end) forwards;
+}
+
+@keyframes px-meow-pop {
+  0% {
+    opacity: 0;
+    transform: translateY(4px) scale(0.9);
+  }
+  20%,
+  75% {
+    opacity: 1;
+    transform: translateY(0px) scale(1);
+  }
+  100% {
+    opacity: 0;
+    transform: translateY(-4px) scale(1);
+  }
+}
+
 /* Pixel Palette Fills */
 .px-shadow {
   fill: rgba(0, 0, 0, 0.28);

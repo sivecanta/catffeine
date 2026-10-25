@@ -21,6 +21,7 @@ export interface AppStateSnapshot {
 
 const appRoot = document.getElementById("app") as HTMLElement;
 const catHitbox = document.getElementById("cat-hitbox") as HTMLElement;
+const meowBubble = document.getElementById("meow-bubble") as HTMLElement;
 const statusBanner = document.getElementById("status-banner") as HTMLElement;
 const statusLabel = document.getElementById("status-label") as HTMLElement;
 const timerBadge = document.getElementById("timer-badge") as HTMLElement;
@@ -49,6 +50,46 @@ let currentState: AppStateSnapshot = {
 };
 
 let menuOpen = false;
+let audioCtx: AudioContext | null = null;
+let meowTimer: number | null = null;
+
+function playWakeMeow(): void {
+  // Show pixel "Meow!" speech bubble
+  meowBubble.classList.add("hidden");
+  void meowBubble.offsetWidth; // restart animation
+  meowBubble.classList.remove("hidden");
+  if (meowTimer !== null) window.clearTimeout(meowTimer);
+  meowTimer = window.setTimeout(() => {
+    meowBubble.classList.add("hidden");
+  }, 900);
+
+  // Synthesize a cozy pixel-cat "mew!" chirp via Web Audio API
+  try {
+    const Ctx = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
+    if (!audioCtx) audioCtx = new Ctx();
+    if (audioCtx.state === "suspended") void audioCtx.resume();
+
+    const now = audioCtx.currentTime;
+    const osc = audioCtx.createOscillator();
+    const gain = audioCtx.createGain();
+
+    osc.type = "triangle";
+    osc.frequency.setValueAtTime(520, now);
+    osc.frequency.exponentialRampToValueAtTime(880, now + 0.09);
+    osc.frequency.exponentialRampToValueAtTime(620, now + 0.24);
+
+    gain.gain.setValueAtTime(0.001, now);
+    gain.gain.linearRampToValueAtTime(0.18, now + 0.03);
+    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.26);
+
+    osc.connect(gain);
+    gain.connect(audioCtx.destination);
+    osc.start(now);
+    osc.stop(now + 0.27);
+  } catch {
+    // Ignore if audio device is unavailable
+  }
+}
 
 export function formatDuration(seconds: number): string {
   const hrs = Math.floor(seconds / 3600);
@@ -110,8 +151,13 @@ function setMenuOpen(open: boolean): void {
 }
 
 async function toggleAwakePolicy(): Promise<void> {
+  const wasSleeping = currentState.cat_state === "sleeping";
   const policy: StayAwakePolicy = currentState.policy === "off" ? "indefinite" : "off";
-  renderState(await invoke<AppStateSnapshot>("set_stay_awake_policy", { policy }));
+  const next = await invoke<AppStateSnapshot>("set_stay_awake_policy", { policy });
+  renderState(next);
+  if (wasSleeping && next.cat_state !== "sleeping") {
+    playWakeMeow();
+  }
 }
 
 // Left-click toggle & threshold-based free-drag on the cat
@@ -205,11 +251,14 @@ contextMenu.addEventListener("click", async (event) => {
   setMenuOpen(false);
 
   if (btn.dataset.policy) {
-    renderState(
-      await invoke<AppStateSnapshot>("set_stay_awake_policy", {
-        policy: btn.dataset.policy as StayAwakePolicy,
-      })
-    );
+    const wasSleeping = currentState.cat_state === "sleeping";
+    const next = await invoke<AppStateSnapshot>("set_stay_awake_policy", {
+      policy: btn.dataset.policy as StayAwakePolicy,
+    });
+    renderState(next);
+    if (wasSleeping && next.cat_state !== "sleeping") {
+      playWakeMeow();
+    }
   } else if (btn.dataset.position) {
     renderState(
       await invoke<AppStateSnapshot>("set_dock_position", {
