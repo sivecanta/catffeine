@@ -11,6 +11,7 @@ export interface AppStateSnapshot {
   policy: StayAwakePolicy;
   dock_position: DockPosition;
   always_on_top: boolean;
+  launch_on_start: boolean;
   cat_visible: boolean;
   active_agents: number;
   preventing_sleep: boolean;
@@ -27,6 +28,7 @@ const quickPinBtn = document.getElementById("quick-pin-btn") as HTMLButtonElemen
 const unhideBtn = document.getElementById("unhide-btn") as HTMLButtonElement;
 const contextMenu = document.getElementById("context-menu") as HTMLElement;
 const menuAlwaysOnTop = document.getElementById("menu-always-on-top") as HTMLButtonElement;
+const menuLaunchOnStart = document.getElementById("menu-launch-on-start") as HTMLButtonElement;
 const menuToggleVisibleLabel = document.getElementById("menu-toggle-visible-label") as HTMLElement;
 
 // Cache menu button collections once at startup
@@ -38,6 +40,7 @@ let currentState: AppStateSnapshot = {
   policy: "off",
   dock_position: "bottom-right",
   always_on_top: true,
+  launch_on_start: false,
   cat_visible: true,
   active_agents: 0,
   preventing_sleep: false,
@@ -94,6 +97,7 @@ function renderState(snapshot: AppStateSnapshot): void {
     btn.classList.toggle("active", btn.dataset.position === snapshot.dock_position);
   }
   menuAlwaysOnTop.classList.toggle("active", snapshot.always_on_top);
+  menuLaunchOnStart.classList.toggle("active", snapshot.launch_on_start);
 }
 
 function setMenuOpen(open: boolean): void {
@@ -216,6 +220,12 @@ contextMenu.addEventListener("click", async (event) => {
     renderState(
       await invoke<AppStateSnapshot>("set_always_on_top", {
         alwaysOnTop: !currentState.always_on_top,
+      })
+    );
+  } else if (btn.id === "menu-launch-on-start") {
+    renderState(
+      await invoke<AppStateSnapshot>("set_launch_on_start", {
+        enabled: !currentState.launch_on_start,
       })
     );
   } else if (btn.id === "menu-toggle-visible") {

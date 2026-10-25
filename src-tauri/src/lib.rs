@@ -1,3 +1,4 @@
+pub mod autostart;
 pub mod positioning;
 pub mod power;
 pub mod watcher;
@@ -12,6 +13,7 @@ use tauri::menu::{MenuBuilder, MenuItemBuilder, SubmenuBuilder};
 use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
 use tauri::{AppHandle, Emitter, Manager, WebviewWindow};
 
+use crate::autostart::{is_launch_on_start_enabled, set_launch_on_start as apply_os_autostart};
 use crate::positioning::{apply_dock_position, DockPosition};
 use crate::power::PowerManager;
 use crate::watcher::{resolve_watcher_port, spawn_watcher_server};
@@ -63,6 +65,7 @@ pub struct AppStateSnapshot {
     pub policy: StayAwakePolicy,
     pub dock_position: DockPosition,
     pub always_on_top: bool,
+    pub launch_on_start: bool,
     pub cat_visible: bool,
     pub active_agents: u32,
     pub preventing_sleep: bool,
@@ -77,6 +80,7 @@ pub struct AppStateInner {
     pub policy_expires_at: Option<Instant>,
     pub dock_position: DockPosition,
     pub always_on_top: bool,
+    pub launch_on_start: bool,
     pub cat_visible: bool,
     pub active_agents: u32,
     pub watcher_port: u16,
@@ -84,7 +88,9 @@ pub struct AppStateInner {
 
 impl AppStateInner {
     pub fn new(watcher_port: u16) -> Self {
-        Self::with_power(PowerManager::new(), watcher_port)
+        let mut state = Self::with_power(PowerManager::new(), watcher_port);
+        state.launch_on_start = is_launch_on_start_enabled();
+        state
     }
 
     pub fn with_power(power: PowerManager, watcher_port: u16) -> Self {
@@ -94,6 +100,7 @@ impl AppStateInner {
             policy_expires_at: None,
             dock_position: DockPosition::BottomRight,
             always_on_top: true,
+            launch_on_start: false,
             cat_visible: true,
             active_agents: 0,
             watcher_port,
@@ -165,6 +172,7 @@ impl AppStateInner {
             policy: self.policy,
             dock_position: self.dock_position,
             always_on_top: self.always_on_top,
+            launch_on_start: self.launch_on_start,
             cat_visible: self.cat_visible,
             active_agents: self.active_agents,
             preventing_sleep: self.power.is_preventing_sleep(),
@@ -254,6 +262,16 @@ pub fn apply_cat_visible_and_sync(
     })
 }
 
+fn apply_launch_on_start_and_sync(
+    app: &AppHandle,
+    enabled: bool,
+) -> Result<AppStateSnapshot, String> {
+    let actual = apply_os_autostart(enabled)?;
+    Ok(sync_and_broadcast_state(app, |inner| {
+        inner.launch_on_start = actual;
+    }))
+}
+
 fn shutdown_and_exit(app: &AppHandle) {
     let _ = sync_and_broadcast_state(app, AppStateInner::reset_for_quit);
     app.exit(0);
@@ -285,6 +303,11 @@ fn set_always_on_top(
     always_on_top: bool,
 ) -> Result<AppStateSnapshot, String> {
     apply_always_on_top_and_sync(&app, Some(&window), always_on_top)
+}
+
+#[tauri::command]
+fn set_launch_on_start(app: AppHandle, enabled: bool) -> Result<AppStateSnapshot, String> {
+    apply_launch_on_start_and_sync(&app, enabled)
 }
 
 #[tauri::command]
@@ -337,6 +360,8 @@ fn setup_system_tray(app: &AppHandle) -> Result<(), Box<dyn std::error::Error>> 
         MenuItemBuilder::with_id("toggle_visible", "Show / Hide Cat").build(app)?;
     let toggle_aot =
         MenuItemBuilder::with_id("toggle_always_on_top", "Toggle Always on Top").build(app)?;
+    let toggle_autostart =
+        MenuItemBuilder::with_id("toggle_launch_on_start", "Toggle Launch on Startup").build(app)?;
     let quit_item = MenuItemBuilder::with_id("quit", "Quit Catffeine").build(app)?;
 
     let tray_menu = MenuBuilder::new(app)
@@ -346,6 +371,7 @@ fn setup_system_tray(app: &AppHandle) -> Result<(), Box<dyn std::error::Error>> 
         .item(&position_submenu)
         .separator()
         .item(&toggle_aot)
+        .item(&toggle_autostart)
         .separator()
         .item(&quit_item)
         .build()?;
@@ -417,6 +443,15 @@ fn setup_system_tray(app: &AppHandle) -> Result<(), Box<dyn std::error::Error>> 
                     .always_on_top;
                 let _ = apply_always_on_top_and_sync(app, None, next);
             }
+            "toggle_launch_on_start" => {
+                let next = !app
+                    .state::<AppState>()
+                    .0
+                    .lock()
+                    .expect("AppState mutex poisoned")
+                    .launch_on_start;
+                let _ = apply_launch_on_start_and_sync(app, next);
+            }
             "quit" => shutdown_and_exit(app),
             _ => {}
         });
@@ -478,6 +513,7 @@ pub fn run() {
             set_stay_awake_policy,
             set_dock_position,
             set_always_on_top,
+            set_launch_on_start,
             set_cat_visible,
             set_ignore_cursor_events,
             agent_start,
