@@ -14,54 +14,28 @@ A cozy, lightweight cross-platform (**Windows**, **macOS**, **Linux**) pixel-art
 
 ---
 
-## Quick Start: Download from GitHub Releases
+## Quick Start
 
-1. Go to the [**Releases**](../../releases) page and download the binary for your platform:
-   - **Windows (`x86_64`, 64-bit)**: Download `catffeine.exe`.
-   - **macOS**: Download `Catffeine.dmg` / `Catffeine.app`.
+### Option 1: Download from GitHub Releases
+1. Go to the [**Releases**](../../releases) page.
+2. Download the build for your OS:
+   - **Windows (`x86_64`, 64-bit)**: Download and open `catffeine.exe`.
+   - **macOS (`aarch64` / `x86_64`)**: Download and open `Catffeine.dmg` / `Catffeine.app`.
 
-### Running Unsigned Release Binaries
+### Option 2: Launch or Build from Terminal
 
-Because release binaries are community-built without a paid EV / Apple Developer ID certificate, your OS may flag files downloaded via a web browser:
-
-- **Windows 10 / 11 (SmartScreen / Smart App Control)**:
-  - Before double-clicking a downloaded `catffeine.exe`, unblock the browser's Mark-of-the-Web in PowerShell:
-    ```powershell
-    Unblock-File -Path .\catffeine.exe
-    ```
-  - Or if running from WSL, launch it directly from the terminal (`./catffeine.exe`) or copy it via raw bytes:
-    ```powershell
-    [IO.File]::WriteAllBytes("$HOME\Desktop\catffeine.exe", [IO.File]::ReadAllBytes("\\wsl.localhost\Ubuntu\home\kaizen\projects\git\catffeine\catffeine.exe"))
-    ```
-- **macOS (Gatekeeper)**:
-  - Clear the quarantine attribute once in Terminal before opening:
-    ```bash
-    xattr -cr /Applications/Catffeine.app
-    ```
-
----
-
-## Launching & Building from Terminal
-
-### 1. Run in Development Mode
 ```bash
+# Install dependencies and run in development mode
 npm install
 npm run tauri dev
-```
 
-### 2. Build Standalone Windows `.exe` (`x86_64-pc-windows-msvc`) from WSL / Linux
-```bash
+# Build standalone Windows executable (catffeine.exe) from WSL
 npm run build:win
-```
-This cross-compiles the optimized standalone Windows executable to `./catffeine.exe` (and `src-tauri/target/x86_64-pc-windows-msvc/release/catffeine.exe`).
 
-You can launch it directly from your WSL or Windows terminal:
-```bash
+# Launch the Windows executable directly from terminal
 ./catffeine.exe
-```
 
-### 3. Build Native Release Bundle (macOS / Linux / Windows)
-```bash
+# Build native OS release bundle (.msi / .exe / .dmg / .app / .deb / .AppImage)
 npx tauri build
 ```
 
@@ -77,7 +51,7 @@ npx tauri build
     - `Pin Here (Lock)`: Lock the cat at its current custom screen coordinates (also available via the one-click **`Pin Here`** badge while in Free Drag mode).
     - `Bottom Right` / `Bottom Left`: Snap above the taskbar/dock corners.
   - **Always on Top**: Keep the cat floating above all windows (enabled by default).
-  - **Launch on Startup**: Automatically start Catffeine when you log into Windows (`HKCU\...\Run` via `%LOCALAPPDATA%\Catffeine\catffeine.exe`), macOS (`~/Library/LaunchAgents/com.catffeine.desktop.plist`), or Linux (`~/.config/autostart/catffeine.desktop`).
+  - **Launch on Startup**: Automatically start Catffeine when you log into Windows, macOS, or Linux.
   - **Hide / Show Cat**: Hide the desktop window into the Windows System Tray / macOS Menu Bar. Left-click the tray/menu-bar cat icon (or click `Show Cat`) to unhide anytime.
 
 ---
