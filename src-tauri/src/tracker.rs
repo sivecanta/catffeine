@@ -1,12 +1,15 @@
 //! Background AI Agent Activity Detector (`Claude`, `Codex`, `Antigravity`, `Cursor`).
 //!
 //! Tracks a single user-selected agent and detects when it is actively working vs. finished:
-//! - **Antigravity**: Inspects `~/.gemini/antigravity/brain/*/.system_generated/logs/transcript.jsonl`
+//! - **Antigravity**: Inspects the tail of `~/.gemini/antigravity/brain/*/.system_generated/logs/transcript.jsonl`
 //!   plus active `.system_generated/tasks/*.log` files.
-//!   An Antigravity conversation is mid-turn unless the final step in `transcript.jsonl` is a
-//!   `"PLANNER_RESPONSE"` with `"status":"DONE"`, has **no** `"tool_calls"` (and `"tool_calls"` was
-//!   not truncated into `"truncated_fields"`), and no transcript or background task log has been
-//!   written within the settle window.
+//!   An Antigravity conversation is busy if:
+//!   1. Any background task step in the tail still has `"status":"RUNNING"` without a matching
+//!      `"type":"SYSTEM_MESSAGE"` completion for that task (`sender=<task-id>`), OR
+//!   2. Any `.system_generated/tasks/*.log` file was modified recently, OR
+//!   3. The final step in `transcript.jsonl` is not a `"PLANNER_RESPONSE"`, OR
+//!   4. The final `"PLANNER_RESPONSE"` has `"tool_calls"` (inline or in `"truncated_fields"`), OR
+//!   5. `transcript.jsonl` was written within the last 5 seconds.
 //! - **Claude (`Claude Code`)**: Inspects `~/.claude/projects/*/*.jsonl`; a turn is only finished
 //!   when the final entry is `"type":"assistant"` without a pending `"tool_use"` block.
 //! - **Codex (`OpenAI Codex CLI`)**: Inspects `~/.codex` session logs with a 15-second settle window.
@@ -42,31 +45,59 @@ impl TrackedAgent {
     }
 }
 
-/// Pure classifier for the last line of an Antigravity `transcript.jsonl` file.
+/// Pure classifier for the tail of an Antigravity `transcript.jsonl` file.
 ///
-/// Key insight: During a multi-step agent turn, Antigravity appends intermediate steps like:
-/// - `"type":"USER_INPUT"` (user prompt received)
-/// - `"type":"PLANNER_RESPONSE"` with `"tool_calls":[...]` (or `"truncated_fields":["tool_calls"]`)
-/// - `"type":"GENERIC"` (tool output returned; model is now thinking for the next step!)
-/// - `"type":"SYSTEM_MESSAGE"` (background task finished; model is now waking up!)
-///
-/// Therefore, a turn is **busy** during ALL of those intermediate steps, and is ONLY idle/done
-/// when the last step is a `"PLANNER_RESPONSE"` that has no `"tool_calls"` (neither inline nor
-/// in `"truncated_fields"`) and the file has settled for >5 seconds.
-pub fn is_antigravity_transcript_busy(last_line: &str, age: Duration) -> bool {
+/// Handles two critical mid-turn cases:
+/// 1. **Synchronous tool steps**: `USER_INPUT` -> `PLANNER_RESPONSE (tool_calls)` -> `GENERIC` -> ...
+/// 2. **Async background tasks**: `GENERIC` with `"status":"RUNNING"` and `task id: .../task-N`,
+///    followed by an interim `PLANNER_RESPONSE` ("I launched the command and will wait for it to finish")
+///    while the background task is still running! In `transcript.jsonl` (append-only), the `RUNNING`
+///    line remains `"status":"RUNNING"` until a later `"type":"SYSTEM_MESSAGE"` line arrives with
+///    `Task id ".../task-N" finished`.
+pub fn is_antigravity_transcript_busy(tail_text: &str, age: Duration) -> bool {
     if age > Duration::from_secs(600) {
         return false;
     }
     if age <= Duration::from_secs(5) {
         return true;
     }
-    let trimmed = last_line.trim();
-    if trimmed.is_empty() {
+
+    let lines: Vec<&str> = tail_text
+        .lines()
+        .map(str::trim)
+        .filter(|l| !l.is_empty())
+        .collect();
+
+    let Some(&last_line) = lines.last() else {
         return false;
+    };
+
+    // Check if any recent step in the tail launched a background task ("status":"RUNNING")
+    // that has not yet been closed by a subsequent SYSTEM_MESSAGE ("Task id \"...\" finished").
+    let mut pending_running_tasks: Vec<&str> = Vec::new();
+    for &line in &lines {
+        if line.contains(r#""status":"RUNNING""#) || line.contains(r#""status": "RUNNING""#) {
+            if let Some(task_id) = extract_running_task_id(line) {
+                if !pending_running_tasks.contains(&task_id) {
+                    pending_running_tasks.push(task_id);
+                }
+            } else {
+                // Unknown running step without task_id: if it's within the last 3 lines, still busy
+                pending_running_tasks.push("__running__");
+            }
+        } else if line.contains(r#""type":"SYSTEM_MESSAGE""#)
+            || line.contains(r#""type": "SYSTEM_MESSAGE""#)
+        {
+            pending_running_tasks.retain(|&id| id != "__running__" && !line.contains(id));
+        }
     }
 
-    let is_planner_response = trimmed.contains(r#""type":"PLANNER_RESPONSE""#)
-        || trimmed.contains(r#""type": "PLANNER_RESPONSE""#);
+    if !pending_running_tasks.is_empty() {
+        return true;
+    }
+
+    let is_planner_response = last_line.contains(r#""type":"PLANNER_RESPONSE""#)
+        || last_line.contains(r#""type": "PLANNER_RESPONSE""#);
 
     if !is_planner_response {
         // Any non-PLANNER_RESPONSE step (USER_INPUT, GENERIC tool result, SYSTEM_MESSAGE, etc.)
@@ -74,9 +105,22 @@ pub fn is_antigravity_transcript_busy(last_line: &str, age: Duration) -> bool {
         return true;
     }
 
-    trimmed.contains(r#""tool_calls":[{"#)
-        || trimmed.contains(r#""tool_calls": [{"#)
-        || trimmed.contains(r#""tool_calls""#)
+    last_line.contains(r#""tool_calls":[{"#)
+        || last_line.contains(r#""tool_calls": [{"#)
+        || last_line.contains(r#""tool_calls""#)
+}
+
+fn extract_running_task_id(line: &str) -> Option<&str> {
+    let marker = "task id: ";
+    let start = line.find(marker)? + marker.len();
+    let rest = &line[start..];
+    let end = rest.find(['\\', '"', '\n', '\r', ' '])?;
+    let id = &rest[..end];
+    if id.is_empty() {
+        None
+    } else {
+        Some(id)
+    }
 }
 
 /// Pure classifier for the last line of a Claude Code session `.jsonl` file.
@@ -124,19 +168,30 @@ fn candidate_home_dirs() -> Vec<PathBuf> {
     homes
 }
 
-fn read_last_non_empty_line(path: &Path) -> Option<String> {
+fn read_tail_text(path: &Path, max_bytes: u64) -> Option<String> {
     use std::io::{Read, Seek, SeekFrom};
     let mut file = std::fs::File::open(path).ok()?;
     let len = file.metadata().ok()?.len();
     if len == 0 {
         return None;
     }
-    let read_size = len.min(32_768);
+    let read_size = len.min(max_bytes);
     file.seek(SeekFrom::End(-(read_size as i64))).ok()?;
     let mut buf = Vec::with_capacity(read_size as usize);
     file.read_to_end(&mut buf).ok()?;
     let text = String::from_utf8_lossy(&buf);
-    text.lines()
+    // If we seeked into the middle of the file, skip the partial first line
+    if len > max_bytes {
+        if let Some(idx) = text.find('\n') {
+            return Some(text[idx + 1..].to_string());
+        }
+    }
+    Some(text.to_string())
+}
+
+fn read_last_non_empty_line(path: &Path) -> Option<String> {
+    let tail = read_tail_text(path, 32_768)?;
+    tail.lines()
         .rev()
         .find(|l| !l.trim().is_empty())
         .map(str::to_string)
@@ -162,15 +217,15 @@ fn check_antigravity_busy() -> bool {
             if age > Duration::from_secs(600) {
                 continue;
             }
-            if let Some(last_line) = read_last_non_empty_line(&transcript) {
-                if is_antigravity_transcript_busy(&last_line, age) {
+            if let Some(tail_text) = read_tail_text(&transcript, 65_536) {
+                if is_antigravity_transcript_busy(&tail_text, age) {
                     return true;
                 }
             }
             // Also check if any background task log in `.system_generated/tasks` was written recently
             let tasks_dir = sys_dir.join("tasks");
             if let Some((_task_log, task_age)) = most_recent_file_age_under(&tasks_dir, 2, now) {
-                if task_age <= Duration::from_secs(6) {
+                if task_age <= Duration::from_secs(8) {
                     return true;
                 }
             }
@@ -302,26 +357,30 @@ mod tests {
             Duration::from_secs(45)
         ));
 
-        // SYSTEM_MESSAGE step (background task completed, model is waking up!)
-        let system_msg =
-            r#"{"step_index":14,"type":"SYSTEM_MESSAGE","status":"DONE","content":"Task finished"}"#;
+        // Background task RUNNING followed by interim PLANNER_RESPONSE ("I launched the command and will wait")
+        let running_bg_task_with_interim_response = concat!(
+            r#"{"step_index":629,"type":"GENERIC","status":"RUNNING","content":"Tool is running as a background task with task id: conv-1/task-629\nLog output"}"#,
+            "\n",
+            r#"{"step_index":630,"type":"PLANNER_RESPONSE","status":"DONE","content":"It is rebuilding now — I will update you when it finishes!"}"#
+        );
         assert!(is_antigravity_transcript_busy(
-            system_msg,
-            Duration::from_secs(25)
+            running_bg_task_with_interim_response,
+            Duration::from_secs(40)
         ));
 
-        // Final PLANNER_RESPONSE without tool_calls:
-        let final_response_line =
-            r#"{"step_index":15,"type":"PLANNER_RESPONSE","status":"DONE","content":"All done!"}"#;
-        // Within 5 seconds of write, still settling
-        assert!(is_antigravity_transcript_busy(
-            final_response_line,
-            Duration::from_secs(2)
-        ));
-        // After 6+ seconds with no tool_calls, turn is truly finished!
+        // Once the background task finishes via SYSTEM_MESSAGE AND the model emits its final PLANNER_RESPONSE:
+        let finished_bg_task_and_final_response = concat!(
+            r#"{"step_index":629,"type":"GENERIC","status":"RUNNING","content":"Tool is running as a background task with task id: conv-1/task-629\nLog output"}"#,
+            "\n",
+            r#"{"step_index":630,"type":"PLANNER_RESPONSE","status":"DONE","content":"It is rebuilding now"}"#,
+            "\n",
+            r#"{"step_index":631,"type":"SYSTEM_MESSAGE","status":"DONE","content":"sender=conv-1/task-629 priority=HIGH Task id \"conv-1/task-629\" finished"}"#,
+            "\n",
+            r#"{"step_index":632,"type":"PLANNER_RESPONSE","status":"DONE","content":"All done!"}"#
+        );
         assert!(!is_antigravity_transcript_busy(
-            final_response_line,
-            Duration::from_secs(6)
+            finished_bg_task_and_final_response,
+            Duration::from_secs(8)
         ));
     }
 
