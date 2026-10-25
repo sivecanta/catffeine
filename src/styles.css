@@ -21,6 +21,14 @@
   padding: 0;
   user-select: none;
   -webkit-user-select: none;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+*::-webkit-scrollbar {
+  display: none;
+  width: 0;
+  height: 0;
 }
 
 html,
@@ -440,8 +448,7 @@ body {
   left: 50%;
   transform: translateX(-50%);
   width: 204px;
-  max-height: calc(100vh - 12px);
-  overflow-y: auto;
+  overflow: hidden;
   background: rgba(22, 19, 28, 0.97);
   border: 2px solid #564964;
   border-radius: 6px;
@@ -457,7 +464,7 @@ body {
   text-transform: uppercase;
   letter-spacing: 0.06em;
   color: #94a3b8;
-  padding: 2px 8px 1px;
+  padding: 1px 8px;
 }
 
 .menu-item {
@@ -465,7 +472,7 @@ body {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 3px 8px;
+  padding: 2px 8px;
   border: none;
   border-radius: 4px;
   background: transparent;
@@ -501,7 +508,7 @@ body {
   display: flex;
   align-items: center;
   gap: 6px;
-  padding: 2px 8px 4px 28px;
+  padding: 2px 8px 3px 28px;
 }
 
 .volume-label {
@@ -512,6 +519,8 @@ body {
 
 .meow-volume-slider {
   flex: 1;
+  min-width: 0;
+  width: 100%;
   height: 4px;
   accent-color: #f59e0b;
   cursor: pointer;
