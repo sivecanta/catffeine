@@ -1,6 +1,6 @@
 [package]
 name = "catffeine"
-version = "0.1.0"
+version = "0.2.0"
 description = "A cozy cross-platform desktop cat that prevents your system from sleeping"
 authors = ["Catffeine Contributors"]
 edition = "2021"

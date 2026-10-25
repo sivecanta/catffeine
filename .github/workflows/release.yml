@@ -4,9 +4,9 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: "Pre-release tag (e.g. v0.1.0)"
+        description: "Pre-release tag (e.g. v0.2.0)"
         required: true
-        default: "v0.1.0"
+        default: "v0.2.0"
 
 permissions:
   contents: write
@@ -62,15 +62,51 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           tagName: ${{ github.ref_type == 'tag' && github.ref_name || inputs.tag }}
-          releaseName: "Catffeine ${{ github.ref_type == 'tag' && github.ref_name || inputs.tag }} (Pre-release)"
+          releaseName: "Catffeine ${{ github.ref_type == 'tag' && github.ref_name || inputs.tag }} — AI Agent Tracker & Wake-Up Meow (Pre-release)"
           releaseBody: |
-            A cozy, lightweight pixel-art desktop companion cat that lives on your desktop, Windows System Tray, or macOS Menu Bar — keeping your computer awake indefinitely, on a timer (`30m` / `1h` / `2h`), or automatically while AI agents and CLI tasks are running.
+            A cozy, lightweight pixel-art desktop companion cat that lives on your desktop, Windows System Tray, or macOS Menu Bar — keeping your computer awake indefinitely, on a timer (`30m` / `1h` / `2h`), or automatically while tracking your AI coding agents (**Claude**, **Codex**, **Antigravity**, **Cursor**) and CLI tasks.
 
-            ### 📦 Downloads
-            - **macOS (Apple Silicon `M1`/`M2`/`M3`/`M4`)**: `Catffeine_0.1.0_aarch64.dmg`
-            - **macOS (Intel `x86_64`)**: `Catffeine_0.1.0_x64.dmg`
-            - **Windows 10 / 11 (`x86_64`)**: `Catffeine_0.1.0_x64-setup.exe` / `.msi` (or standalone `catffeine.exe`)
-            - **Linux (`x86_64`)**: `.deb` / `.rpm` / `.AppImage`
+            ### 📦 Direct Downloads
+
+            | OS | Architecture | Download Link | Format / Notes |
+            | :--- | :--- | :--- | :--- |
+            | **Windows 10 / 11 (Portable)** | `x86_64` (64-bit) | [**`catffeine.exe`**](../../releases/download/v0.2.0/catffeine.exe) | Standalone portable executable (double-click to run) |
+            | **Windows 10 / 11 (Installer)** | `x86_64` (64-bit) | [**`Catffeine_0.2.0_x64-setup.exe`**](../../releases/download/v0.2.0/Catffeine_0.2.0_x64-setup.exe) | Windows NSIS / `.msi` installer |
+            | **macOS (Apple Silicon)** | `aarch64` (`M1`–`M4`) | [**`Catffeine_0.2.0_aarch64.dmg`**](../../releases/download/v0.2.0/Catffeine_0.2.0_aarch64.dmg) | macOS Disk Image installer |
+            | **macOS (Intel)** | `x86_64` | [**`Catffeine_0.2.0_x64.dmg`**](../../releases/download/v0.2.0/Catffeine_0.2.0_x64.dmg) | macOS Disk Image installer |
+            | **Linux (Ubuntu / Debian)** | `x86_64` (`amd64`) | [**`Catffeine_0.2.0_amd64.deb`**](../../releases/download/v0.2.0/Catffeine_0.2.0_amd64.deb) | Debian package (`sudo apt install ./Catffeine_0.2.0_amd64.deb`) |
+            | **Linux (Fedora / RHEL)** | `x86_64` | [**`Catffeine-0.2.0-1.x86_64.rpm`**](../../releases/download/v0.2.0/Catffeine-0.2.0-1.x86_64.rpm) | RPM package (`sudo dnf install ./Catffeine-0.2.0-1.x86_64.rpm`) |
+            | **Linux (AppImage)** | `x86_64` | [**`Catffeine_0.2.0_amd64.AppImage`**](../../releases/download/v0.2.0/Catffeine_0.2.0_amd64.AppImage) | Portable Linux AppImage |
+
+            ---
+
+            ### ✨ What's New in `v0.2.0`
+
+            - **🤖 Live AI Agent Tracker (`Track` Menu)**:
+              - Hover over the **`Track`** button on the status badge to select **Claude**, **Codex**, **Antigravity**, or **Cursor** (single-select).
+              - While the selected agent is working, the cat automatically puts on pixel coding glasses, types on his mini laptop, and prevents your computer from sleeping.
+              - **Completion Meow**: As soon as the tracked agent finishes its turn, the cat chirps a synthesized **"mew!"** and pops up a `<Agent> done! Meow!` speech bubble.
+            - **🐾 Pixel-Art Desktop Cat & Wake-Up Meow**:
+              - **Sleeping (`off`)**: Curled up with floating `Zzz`s — normal OS sleep allowed.
+              - **Awake (`indefinite` / timer)**: Click the cat to wake him up with a **"mew!"** chirp, a `Meow!` speech bubble, and a steaming coffee mug while preventing system & display sleep.
+              - **Working (`agent` active)**: Typing on a mini laptop with pixel coding glasses.
+            - **📌 Pin & Move Anywhere**:
+              - Unlock with **Unpin & Move** to drag the cat anywhere on your screen, then click the **Pin Here** badge (or right-click menu) to lock it in place.
+              - Quick-snap presets for **Bottom Right** and **Bottom Left** above the taskbar/dock.
+            - **🖥️ System Tray / Menu Bar & Autostart**:
+              - Always-on-top by default.
+              - **Hide Cat** into the Windows System Tray or macOS Menu Bar and left-click the tray cat icon anytime to unhide.
+              - Toggle **Launch on Startup** directly from the right-click menu across Windows, macOS, and Linux.
+            - **🔌 Local Agent HTTP API (`127.0.0.1:41905`)**:
+              - `POST /agent/start` & `POST /agent/stop` for custom scripts and CLI hooks.
           releaseDraft: false
           prerelease: true
           args: ${{ matrix.args }}
+
+      - name: Upload standalone portable Windows catffeine.exe
+        if: matrix.platform == 'windows-latest'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          $tag = "${{ github.ref_type == 'tag' && github.ref_name || inputs.tag }}"
+          gh release upload $tag src-tauri/target/release/catffeine.exe --clobber
