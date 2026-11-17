@@ -6,6 +6,13 @@
 
 use serde::{Deserialize, Serialize};
 use tauri::{PhysicalPosition, WebviewWindow};
+#[cfg(not(target_os = "windows"))]
+use tauri::{PhysicalSize, Size};
+
+/// Compact window height (logical px) for cat + status banner when context menu is closed.
+pub const COMPACT_WINDOW_HEIGHT_LOGICAL: f64 = 190.0;
+/// Expanded window height (logical px) to accommodate the open context menu.
+pub const MENU_WINDOW_HEIGHT_LOGICAL: f64 = 424.0;
 
 /// Taskbar / dock vertical clearance in logical pixels.
 const TASKBAR_OFFSET_LOGICAL: f64 = 48.0;
@@ -96,6 +103,85 @@ pub fn apply_dock_position(window: &WebviewWindow, position: DockPosition) -> Re
     Ok(())
 }
 
+/// Computes a bottom-anchored `(x, y, width, height)` in physical pixels when resizing vertically
+/// so the bottom edge (`y + height`) stays fixed on screen.
+pub fn compute_bottom_anchored_rect(
+    old_pos: (i32, i32),
+    old_size: (u32, u32),
+    target_logical_height: f64,
+    scale: f64,
+) -> (i32, i32, u32, u32) {
+    let new_h = (target_logical_height * scale).round() as u32;
+    let new_y = old_pos.1 + (old_size.1 as i32) - (new_h as i32);
+    (old_pos.0, new_y, old_size.0, new_h)
+}
+
+/// Resizes the window vertically (anchored at its bottom edge) for open vs closed context menu.
+pub fn set_window_menu_open_bounds(window: &WebviewWindow, menu_open: bool) -> Result<(), String> {
+    let old_pos = window
+        .outer_position()
+        .map_err(|e| format!("Failed to query window position: {e}"))?;
+    let old_size = window
+        .outer_size()
+        .map_err(|e| format!("Failed to query window size: {e}"))?;
+    let scale = window
+        .scale_factor()
+        .map_err(|e| format!("Failed to query window scale factor: {e}"))?;
+
+    let target_logical_height = if menu_open {
+        MENU_WINDOW_HEIGHT_LOGICAL
+    } else {
+        COMPACT_WINDOW_HEIGHT_LOGICAL
+    };
+
+    let (x, y, w, h) = compute_bottom_anchored_rect(
+        (old_pos.x, old_pos.y),
+        (old_size.width, old_size.height),
+        target_logical_height,
+        scale,
+    );
+
+    if old_size.height == h {
+        return Ok(());
+    }
+
+    #[cfg(target_os = "windows")]
+    {
+        use windows_sys::Win32::UI::WindowsAndMessaging::{
+            SetWindowPos, SWP_NOACTIVATE, SWP_NOZORDER,
+        };
+        let hwnd = window
+            .hwnd()
+            .map_err(|e| format!("Failed to get HWND: {e}"))?;
+        let ok = unsafe {
+            SetWindowPos(
+                hwnd.0,
+                std::ptr::null_mut(),
+                x,
+                y,
+                w as i32,
+                h as i32,
+                SWP_NOZORDER | SWP_NOACTIVATE,
+            )
+        };
+        if ok == 0 {
+            return Err("SetWindowPos failed while resizing context menu bounds".to_string());
+        }
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    {
+        window
+            .set_size(Size::Physical(PhysicalSize::new(w, h)))
+            .map_err(|e| format!("Failed to set window size: {e}"))?;
+        window
+            .set_position(PhysicalPosition::new(x, y))
+            .map_err(|e| format!("Failed to set window position: {e}"))?;
+    }
+
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -136,5 +222,25 @@ mod tests {
         );
         // x = -1920 + (36 * 2) = -1848, y = 100 + 2160 - 460 - (48 * 2) = 1704
         assert_eq!(coords, Some((-1848, 1704)));
+    }
+
+    #[test]
+    fn bottom_anchored_rect_preserves_bottom_edge_across_menu_toggle() {
+        let old_pos = (1604, 842);
+        let old_size = (220, 190);
+        let (x, y, w, h) =
+            compute_bottom_anchored_rect(old_pos, old_size, MENU_WINDOW_HEIGHT_LOGICAL, 1.0);
+        assert_eq!(x, old_pos.0);
+        assert_eq!(w, old_size.0);
+        assert_eq!(h, 424);
+        assert_eq!(old_pos.1 + old_size.1 as i32, y + h as i32);
+
+        // Scaled HiDPI restore back to compact height also preserves bottom edge
+        let (x2, y2, w2, h2) =
+            compute_bottom_anchored_rect((x, y * 2), (w * 2, h * 2), COMPACT_WINDOW_HEIGHT_LOGICAL, 2.0);
+        assert_eq!(h2, 380);
+        assert_eq!((y * 2) + (h * 2) as i32, y2 + h2 as i32);
+        assert_eq!(x2, x);
+        assert_eq!(w2, w * 2);
     }
 }

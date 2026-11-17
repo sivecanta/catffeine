@@ -137,10 +137,10 @@ body {
 .track-menu {
   display: none;
   position: absolute;
-  bottom: 100%;
+  top: 100%;
   left: 50%;
   transform: translateX(-50%);
-  padding-bottom: 5px;
+  padding-top: 4px;
   z-index: 90;
 }
 
@@ -154,7 +154,7 @@ body {
   padding: 4px;
   min-width: 118px;
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.6);
-  margin-bottom: 2px;
+  margin-top: 2px;
 }
 
 .track-item {

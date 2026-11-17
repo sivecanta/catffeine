@@ -15,7 +15,7 @@ use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent}
 use tauri::{AppHandle, Emitter, Manager, WebviewWindow};
 
 use crate::autostart::{is_launch_on_start_enabled, set_launch_on_start as apply_os_autostart};
-use crate::positioning::{apply_dock_position, DockPosition};
+use crate::positioning::{apply_dock_position, set_window_menu_open_bounds, DockPosition};
 use crate::power::PowerManager;
 use crate::tracker::{is_tracked_agent_busy, TrackedAgent};
 use crate::watcher::{resolve_watcher_port, spawn_watcher_server};
@@ -367,6 +367,11 @@ fn set_ignore_cursor_events(window: WebviewWindow, ignore: bool) -> Result<(), S
 }
 
 #[tauri::command]
+fn set_context_menu_open(window: WebviewWindow, open: bool) -> Result<(), String> {
+    set_window_menu_open_bounds(&window, open)
+}
+
+#[tauri::command]
 fn agent_start(app: AppHandle) -> AppStateSnapshot {
     sync_and_broadcast_state(&app, AppStateInner::agent_start)
 }
@@ -596,6 +601,7 @@ pub fn run() {
             set_cat_visible,
             set_tracked_agent,
             set_ignore_cursor_events,
+            set_context_menu_open,
             agent_start,
             agent_stop,
             quit_app

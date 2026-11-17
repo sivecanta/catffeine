@@ -200,9 +200,13 @@ function renderState(snapshot: AppStateSnapshot): void {
 function setMenuOpen(open: boolean): void {
   if (menuOpen === open) return;
   menuOpen = open;
-  contextMenu.classList.toggle("hidden", !open);
   if (open) {
+    void invoke("set_context_menu_open", { open: true }).catch(() => {});
+    contextMenu.classList.remove("hidden");
     void getCurrentWindow().setFocus().catch(() => {});
+  } else {
+    contextMenu.classList.add("hidden");
+    void invoke("set_context_menu_open", { open: false }).catch(() => {});
   }
 }
 
@@ -292,7 +296,12 @@ unhideBtn.addEventListener("click", async () => {
 // Right-click & Escape context menu handling
 window.addEventListener("contextmenu", (event) => {
   event.preventDefault();
-  setMenuOpen(!menuOpen);
+  const targetInUi =
+    event.target instanceof Element &&
+    Boolean(event.target.closest("#cat-hitbox, #status-banner, #unhide-btn, #context-menu"));
+  if (menuOpen || targetInUi) {
+    setMenuOpen(!menuOpen);
+  }
 });
 
 window.addEventListener("keydown", (event) => {
