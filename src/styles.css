@@ -12,7 +12,7 @@
   --px-laptop-lid: #2b2d42;
   --px-laptop-base: #8d99ae;
   --px-laptop-logo: #72efdd;
-  font-family: "Courier New", Consolas, monospace, -apple-system, BlinkMacSystemFont, sans-serif;
+  font-family: "Cascadia Mono", Consolas, "SF Mono", "DejaVu Sans Mono", ui-monospace, monospace;
 }
 
 * {
@@ -56,12 +56,12 @@ body {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  padding: 4px 10px;
+  padding: 5px 12px;
   border-radius: 4px;
   background: rgba(24, 20, 28, 0.92);
   color: #fde68a;
   font-family: inherit;
-  font-size: 11px;
+  font-size: 12.5px;
   font-weight: 700;
   border: 2px solid #564964;
   box-shadow: 0 3px 0 rgba(0, 0, 0, 0.45);
@@ -78,12 +78,12 @@ body {
 .status-banner {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  padding: 3px 9px;
-  border-radius: 4px;
+  gap: 7px;
+  padding: 4px 10px;
+  border-radius: 6px;
   background: rgba(24, 20, 28, 0.9);
   color: #f8f9fa;
-  font-size: 11px;
+  font-size: 12.5px;
   font-weight: 700;
   letter-spacing: 0.03em;
   border: 2px solid #4a3f55;
@@ -93,13 +93,13 @@ body {
 }
 
 .quick-pin-btn {
-  padding: 1px 5px;
-  border-radius: 3px;
+  padding: 2px 8px;
+  border-radius: 4px;
   border: 1px solid #f59e0b;
   background: rgba(245, 158, 11, 0.2);
   color: #fde68a;
   font-family: inherit;
-  font-size: 10px;
+  font-size: 11.5px;
   font-weight: 700;
   cursor: pointer;
 }
@@ -116,13 +116,13 @@ body {
 }
 
 .track-btn {
-  padding: 1px 6px;
-  border-radius: 3px;
+  padding: 2px 8px;
+  border-radius: 4px;
   border: 1px solid #64748b;
   background: rgba(100, 116, 139, 0.22);
   color: #e2e8f0;
   font-family: inherit;
-  font-size: 10px;
+  font-size: 11.5px;
   font-weight: 700;
   cursor: pointer;
 }
@@ -137,11 +137,20 @@ body {
 .track-menu {
   display: none;
   position: absolute;
-  top: 100%;
-  left: 50%;
-  transform: translateX(-50%);
-  padding-top: 4px;
+  top: calc(100% + 4px);
+  right: 0;
+  left: auto;
+  transform: none;
   z-index: 90;
+}
+
+.track-menu::before {
+  content: "";
+  position: absolute;
+  top: -6px;
+  left: 0;
+  right: 0;
+  height: 6px;
 }
 
 .track-wrapper:hover .track-menu,
@@ -150,25 +159,26 @@ body {
   flex-direction: column;
   background: rgba(22, 19, 28, 0.97);
   border: 2px solid #564964;
-  border-radius: 5px;
-  padding: 4px;
-  min-width: 118px;
+  border-radius: 6px;
+  padding: 5px;
+  min-width: 138px;
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.6);
-  margin-top: 2px;
+  margin-top: 0;
 }
 
 .track-item {
   width: 100%;
   display: flex;
   align-items: center;
-  gap: 6px;
-  padding: 3px 6px;
+  gap: 8px;
+  padding: 5px 8px;
   border: none;
-  border-radius: 3px;
+  border-radius: 4px;
   background: transparent;
   color: #f1f5f9;
   font-family: inherit;
-  font-size: 10px;
+  font-size: 12.5px;
+  font-weight: 600;
   text-align: left;
   cursor: pointer;
   white-space: nowrap;
@@ -183,14 +193,20 @@ body {
   font-weight: 700;
 }
 
+.track-item .menu-check::before {
+  content: "•";
+  color: #64748b;
+}
+
 .track-item.active .menu-check::before {
   content: "■";
   color: #38bdf8;
 }
 
 .status-dot {
-  width: 6px;
-  height: 6px;
+  width: 7px;
+  height: 7px;
+  border-radius: 2px;
   background: #64748b;
 }
 
@@ -210,11 +226,12 @@ body {
 }
 
 .timer-badge {
-  padding: 1px 4px;
-  border-radius: 2px;
+  padding: 1px 6px;
+  border-radius: 3px;
   background: rgba(255, 255, 255, 0.14);
   font-variant-numeric: tabular-nums;
-  font-size: 10px;
+  font-size: 11.5px;
+  font-weight: 700;
   color: #fde68a;
 }
 
@@ -252,10 +269,10 @@ body {
   position: absolute;
   top: -8px;
   right: 8px;
-  padding: 2px 7px;
+  padding: 3px 9px;
   background: #fdf0d5;
   color: #231619;
-  font-size: 11px;
+  font-size: 12.5px;
   font-weight: 700;
   border: 2px solid #231619;
   border-radius: 4px;
@@ -447,24 +464,24 @@ body {
   bottom: 6px;
   left: 50%;
   transform: translateX(-50%);
-  width: 204px;
+  width: 228px;
   overflow: hidden;
   background: rgba(22, 19, 28, 0.97);
   border: 2px solid #564964;
   border-radius: 6px;
-  padding: 5px;
+  padding: 6px;
   box-shadow: 0 6px 16px rgba(0, 0, 0, 0.6);
   z-index: 100;
   pointer-events: auto;
 }
 
 .menu-section-title {
-  font-size: 9px;
+  font-size: 10.5px;
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.06em;
   color: #94a3b8;
-  padding: 1px 8px;
+  padding: 2px 8px 1px;
 }
 
 .menu-item {
@@ -472,13 +489,14 @@ body {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 2px 8px;
+  padding: 3.5px 8px;
   border: none;
   border-radius: 4px;
   background: transparent;
   color: #f1f5f9;
   font-family: inherit;
-  font-size: 11px;
+  font-size: 12.5px;
+  font-weight: 600;
   text-align: left;
   cursor: pointer;
 }
@@ -493,10 +511,10 @@ body {
 }
 
 .menu-check {
-  width: 12px;
+  width: 13px;
   display: inline-block;
   text-align: center;
-  font-size: 10px;
+  font-size: 11px;
 }
 
 .menu-item.active .menu-check::before {
@@ -512,7 +530,7 @@ body {
 }
 
 .volume-label {
-  font-size: 10px;
+  font-size: 11.5px;
   color: #94a3b8;
   font-weight: 700;
 }
@@ -527,10 +545,10 @@ body {
 }
 
 .volume-value {
-  font-size: 10px;
+  font-size: 11.5px;
   color: #fde68a;
   font-variant-numeric: tabular-nums;
-  min-width: 28px;
+  min-width: 34px;
   text-align: right;
 }
 
