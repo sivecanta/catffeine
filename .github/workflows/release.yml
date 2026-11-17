@@ -7,9 +7,9 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: "Pre-release tag (e.g. v0.1.1)"
+        description: "Pre-release tag (e.g. v0.1.2)"
         required: true
-        default: "v0.1.1"
+        default: "v0.1.2"
 
 permissions:
   contents: write
@@ -65,7 +65,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           tagName: ${{ github.ref_type == 'tag' && github.ref_name || inputs.tag }}
-          releaseName: "Catffeine ${{ github.ref_type == 'tag' && github.ref_name || inputs.tag }} — AI Agent Tracker, Sound Controls & Until Agent Done (Pre-release)"
+          releaseName: "Catffeine ${{ github.ref_type == 'tag' && github.ref_name || inputs.tag }} — Appearance Controls, Compact Window & Snappier Agent Tracking (Pre-release)"
           releaseBody: |
             A cozy, lightweight pixel-art desktop companion cat that lives on your desktop, Windows System Tray, or macOS Menu Bar — keeping your computer awake indefinitely, on a timer (`30m` / `1h` / `2h`), **until your tracked AI agent finishes**, or automatically while AI coding agents (**Claude**, **Codex**, **Antigravity**, **Cursor**) and CLI tasks are running.
 
@@ -73,13 +73,13 @@ jobs:
 
             | OS | Architecture | Download Link | Format / Notes |
             | :--- | :--- | :--- | :--- |
-            | **Windows 10 / 11** | `x86_64` (64-bit) | [**`catffeine.exe`**](https://github.com/sivecanta/catffeine/releases/download/v0.1.1/catffeine.exe) | Standalone portable executable (double-click to run) |
-            | **Windows 10 / 11 (Installer)** | `x86_64` (64-bit) | [**`Catffeine_0.1.1_x64-setup.exe`**](https://github.com/sivecanta/catffeine/releases/download/v0.1.1/Catffeine_0.1.1_x64-setup.exe) | Windows NSIS installer |
-            | **macOS (Apple Silicon)** | `aarch64` (`M1`–`M4`) | [**`Catffeine_0.1.1_aarch64.dmg`**](https://github.com/sivecanta/catffeine/releases/download/v0.1.1/Catffeine_0.1.1_aarch64.dmg) | macOS Disk Image installer |
-            | **macOS (Intel)** | `x86_64` | [**`Catffeine_0.1.1_x64.dmg`**](https://github.com/sivecanta/catffeine/releases/download/v0.1.1/Catffeine_0.1.1_x64.dmg) | macOS Disk Image installer |
-            | **Linux (Ubuntu / Debian)** | `x86_64` (`amd64`) | [**`Catffeine_0.1.1_amd64.deb`**](https://github.com/sivecanta/catffeine/releases/download/v0.1.1/Catffeine_0.1.1_amd64.deb) | Debian package (`sudo apt install ./Catffeine_0.1.1_amd64.deb`) |
-            | **Linux (Fedora / RHEL)** | `x86_64` | [**`Catffeine-0.1.1-1.x86_64.rpm`**](https://github.com/sivecanta/catffeine/releases/download/v0.1.1/Catffeine-0.1.1-1.x86_64.rpm) | RPM package (`sudo dnf install ./Catffeine-0.1.1-1.x86_64.rpm`) |
-            | **Linux (Standalone)** | `x86_64` | [**`catffeine-linux-x86_64`**](https://github.com/sivecanta/catffeine/releases/download/v0.1.1/catffeine-linux-x86_64) | Standalone binary (`chmod +x catffeine-linux-x86_64 && ./catffeine-linux-x86_64`) |
+            | **Windows 10 / 11** | `x86_64` (64-bit) | [**`catffeine.exe`**](https://github.com/sivecanta/catffeine/releases/download/v0.1.2/catffeine.exe) | Standalone portable executable (double-click to run) |
+            | **Windows 10 / 11 (Installer)** | `x86_64` (64-bit) | [**`Catffeine_0.1.2_x64-setup.exe`**](https://github.com/sivecanta/catffeine/releases/download/v0.1.2/Catffeine_0.1.2_x64-setup.exe) | Windows NSIS installer |
+            | **macOS (Apple Silicon)** | `aarch64` (`M1`–`M4`) | [**`Catffeine_0.1.2_aarch64.dmg`**](https://github.com/sivecanta/catffeine/releases/download/v0.1.2/Catffeine_0.1.2_aarch64.dmg) | macOS Disk Image installer |
+            | **macOS (Intel)** | `x86_64` | [**`Catffeine_0.1.2_x64.dmg`**](https://github.com/sivecanta/catffeine/releases/download/v0.1.2/Catffeine_0.1.2_x64.dmg) | macOS Disk Image installer |
+            | **Linux (Ubuntu / Debian)** | `x86_64` (`amd64`) | [**`Catffeine_0.1.2_amd64.deb`**](https://github.com/sivecanta/catffeine/releases/download/v0.1.2/Catffeine_0.1.2_amd64.deb) | Debian package (`sudo apt install ./Catffeine_0.1.2_amd64.deb`) |
+            | **Linux (Fedora / RHEL)** | `x86_64` | [**`Catffeine-0.1.2-1.x86_64.rpm`**](https://github.com/sivecanta/catffeine/releases/download/v0.1.2/Catffeine-0.1.2-1.x86_64.rpm) | RPM package (`sudo dnf install ./Catffeine-0.1.2-1.x86_64.rpm`) |
+            | **Linux (Standalone)** | `x86_64` | [**`catffeine-linux-x86_64`**](https://github.com/sivecanta/catffeine/releases/download/v0.1.2/catffeine-linux-x86_64) | Standalone binary (`chmod +x catffeine-linux-x86_64 && ./catffeine-linux-x86_64`) |
 
             *(All attached files are also listed under **Assets** at the bottom of this release.)*
 
@@ -87,7 +87,20 @@ jobs:
 
             ---
 
-            ### 🚀 What's New Since `v0.1.0`
+            ### 🚀 What's New in `v0.1.2`
+
+            - **🎨 Appearance Section & Cat Opacity Slider (`20%–100%`)**:
+              - Right-click menu now groups **Opacity** (`20%–100%` slider with live preview and `localStorage` persistence), **Always on Top**, and **Hide Cat** under a dedicated **Appearance** section.
+            - **🪟 Compact Idle Window (`320×204`) & Bottom-Anchored Menu Resize**:
+              - Tighter default window footprint with smooth, cross-platform window expansion (`512px` tall) anchored to the bottom screen edge when opening the right-click context menu.
+            - **🔤 Crisp Typography & Layered `Track` Popover**:
+              - Improved `Cascadia Mono` / `Consolas` typography legibility, non-wrapping status banner, downward right-aligned `Track` popover rendered cleanly above the cat, and compact `Track` button in `Unpin & Move` mode.
+            - **⚡ Non-Blocking AI Agent Tracking**:
+              - Offloaded agent and WSL transcript scanning (`tokio::task::spawn_blocking`) and cached WSL distro discovery (`OnceLock`) so clicking **Track → Claude / Codex / Antigravity / Cursor** responds instantaneously without UI freezes.
+            - **📦 Leaner Release Binaries**:
+              - Stripped release symbol tables (`strip = true`) for smaller Windows, macOS, and Linux binaries.
+
+            ### 🆕 Included Since `v0.1.0`
 
             - **🤖 Live AI Agent Tracker (`Track` Menu)**:
               - Hover over the **`Track`** button on the status bar to select **Claude**, **Codex**, **Antigravity**, or **Cursor** (single-select; click again to unselect).
