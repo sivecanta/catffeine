@@ -172,7 +172,11 @@ function renderState(snapshot: AppStateSnapshot): void {
 
   // Update Track button label and active state
   trackBtn.textContent =
-    snapshot.tracked_agent === "none" ? "Track" : `Track: ${AGENT_NAMES[snapshot.tracked_agent]}`;
+    snapshot.tracked_agent === "none"
+      ? "Track"
+      : snapshot.dock_position === "free-drag"
+        ? AGENT_NAMES[snapshot.tracked_agent]
+        : `Track: ${AGENT_NAMES[snapshot.tracked_agent]}`;
   trackBtn.classList.toggle("active", snapshot.tracked_agent !== "none");
   for (const btn of trackButtons) {
     btn.classList.toggle("active", btn.dataset.track === snapshot.tracked_agent);

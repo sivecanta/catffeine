@@ -8,7 +8,7 @@ use serde::{Deserialize, Serialize};
 use tauri::{PhysicalPosition, PhysicalSize, Size, WebviewWindow};
 
 /// Compact window height (logical px) for cat + status banner when context menu is closed.
-pub const COMPACT_WINDOW_HEIGHT_LOGICAL: f64 = 196.0;
+pub const COMPACT_WINDOW_HEIGHT_LOGICAL: f64 = 204.0;
 /// Expanded window height (logical px) to accommodate the open context menu.
 pub const MENU_WINDOW_HEIGHT_LOGICAL: f64 = 512.0;
 
@@ -198,7 +198,7 @@ mod tests {
     #[test]
     fn bottom_anchored_rect_preserves_bottom_edge_across_menu_toggle() {
         let old_pos = (1604, 842);
-        let old_size = (260, 196);
+        let old_size = (320, 204);
         let (x, y, w, h) =
             compute_bottom_anchored_rect(old_pos, old_size, MENU_WINDOW_HEIGHT_LOGICAL, 1.0);
         assert_eq!(x, old_pos.0);
@@ -209,7 +209,7 @@ mod tests {
         // Scaled HiDPI restore back to compact height also preserves bottom edge
         let (x2, y2, w2, h2) =
             compute_bottom_anchored_rect((x, y * 2), (w * 2, h * 2), COMPACT_WINDOW_HEIGHT_LOGICAL, 2.0);
-        assert_eq!(h2, 392);
+        assert_eq!(h2, 408);
         assert_eq!((y * 2) + (h * 2) as i32, y2 + h2 as i32);
         assert_eq!(x2, x);
         assert_eq!(w2, w * 2);

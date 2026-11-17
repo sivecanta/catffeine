@@ -15,8 +15,8 @@
       {
         "label": "main",
         "title": "Catffeine",
-        "width": 260,
-        "height": 196,
+        "width": 320,
+        "height": 204,
         "resizable": false,
         "maximizable": false,
         "minimizable": false,

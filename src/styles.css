@@ -92,12 +92,17 @@ body {
   border: 2px solid #4a3f55;
   box-shadow: 0 3px 0 rgba(0, 0, 0, 0.45);
   margin-bottom: 4px;
+  white-space: nowrap;
   pointer-events: auto;
 }
 
 .status-banner:hover,
 .status-banner:focus-within {
   opacity: 1;
+}
+
+.status-label {
+  white-space: nowrap;
 }
 
 .quick-pin-btn {
@@ -109,6 +114,7 @@ body {
   font-family: inherit;
   font-size: 11.5px;
   font-weight: 700;
+  white-space: nowrap;
   cursor: pointer;
 }
 
@@ -132,6 +138,7 @@ body {
   font-family: inherit;
   font-size: 11.5px;
   font-weight: 700;
+  white-space: nowrap;
   cursor: pointer;
 }
 
@@ -240,6 +247,7 @@ body {
   font-variant-numeric: tabular-nums;
   font-size: 11.5px;
   font-weight: 700;
+  white-space: nowrap;
   color: #fde68a;
 }
 
