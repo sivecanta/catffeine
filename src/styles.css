@@ -526,13 +526,14 @@ body {
   display: flex;
   align-items: center;
   gap: 6px;
-  padding: 2px 8px 3px 28px;
+  padding: 2px 8px 3px 21px;
 }
 
 .volume-label {
   font-size: 11.5px;
   color: #94a3b8;
   font-weight: 700;
+  min-width: 48px;
 }
 
 .meow-volume-slider {

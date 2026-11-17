@@ -36,6 +36,8 @@ const contextMenu = document.getElementById("context-menu") as HTMLElement;
 const menuMuteMeow = document.getElementById("menu-mute-meow") as HTMLButtonElement;
 const meowVolumeSlider = document.getElementById("meow-volume-slider") as HTMLInputElement;
 const meowVolumeValue = document.getElementById("meow-volume-value") as HTMLElement;
+const catOpacitySlider = document.getElementById("cat-opacity-slider") as HTMLInputElement;
+const catOpacityValue = document.getElementById("cat-opacity-value") as HTMLElement;
 const menuAlwaysOnTop = document.getElementById("menu-always-on-top") as HTMLButtonElement;
 const menuLaunchOnStart = document.getElementById("menu-launch-on-start") as HTMLButtonElement;
 const menuToggleVisibleLabel = document.getElementById("menu-toggle-visible-label") as HTMLElement;
@@ -68,6 +70,10 @@ let meowVolume = Number(localStorage.getItem("catffeine_meow_volume") ?? "70");
 if (Number.isNaN(meowVolume) || meowVolume < 0 || meowVolume > 100) {
   meowVolume = 70;
 }
+let catOpacity = Number(localStorage.getItem("catffeine_cat_opacity") ?? "100");
+if (Number.isNaN(catOpacity) || catOpacity < 20 || catOpacity > 100) {
+  catOpacity = 100;
+}
 
 function renderSoundControls(): void {
   menuMuteMeow.classList.toggle("active", meowMuted);
@@ -75,7 +81,16 @@ function renderSoundControls(): void {
   meowVolumeValue.textContent = meowMuted ? "Muted" : `${meowVolume}%`;
 }
 
+function renderOpacityControls(): void {
+  catOpacitySlider.value = String(catOpacity);
+  catOpacityValue.textContent = `${catOpacity}%`;
+  const alpha = String(catOpacity / 100);
+  catHitbox.style.opacity = alpha;
+  statusBanner.style.opacity = alpha;
+}
+
 renderSoundControls();
+renderOpacityControls();
 
 function playMeowSound(): void {
   if (meowMuted || meowVolume <= 0) return;
@@ -168,7 +183,7 @@ function renderState(snapshot: AppStateSnapshot): void {
     const count = snapshot.active_agents;
     statusLabel.textContent =
       snapshot.tracked_agent_busy && snapshot.tracked_agent !== "none"
-        ? `Working (${AGENT_NAMES[snapshot.tracked_agent]})`
+        ? "Working"
         : count === 1
           ? "Working (1 agent)"
           : `Working (${count} agents)`;
@@ -331,6 +346,13 @@ meowVolumeSlider.addEventListener("input", () => {
 
 meowVolumeSlider.addEventListener("change", () => {
   playMeowSound();
+});
+
+// Cat transparency/opacity slider adjustment
+catOpacitySlider.addEventListener("input", () => {
+  catOpacity = Math.min(100, Math.max(20, Number(catOpacitySlider.value)));
+  localStorage.setItem("catffeine_cat_opacity", String(catOpacity));
+  renderOpacityControls();
 });
 
 // Single delegated click listener for all context menu actions

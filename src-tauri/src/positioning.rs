@@ -12,7 +12,7 @@ use tauri::{PhysicalSize, Size};
 /// Compact window height (logical px) for cat + status banner when context menu is closed.
 pub const COMPACT_WINDOW_HEIGHT_LOGICAL: f64 = 196.0;
 /// Expanded window height (logical px) to accommodate the open context menu.
-pub const MENU_WINDOW_HEIGHT_LOGICAL: f64 = 480.0;
+pub const MENU_WINDOW_HEIGHT_LOGICAL: f64 = 496.0;
 
 /// Taskbar / dock vertical clearance in logical pixels.
 const TASKBAR_OFFSET_LOGICAL: f64 = 48.0;
@@ -232,7 +232,7 @@ mod tests {
             compute_bottom_anchored_rect(old_pos, old_size, MENU_WINDOW_HEIGHT_LOGICAL, 1.0);
         assert_eq!(x, old_pos.0);
         assert_eq!(w, old_size.0);
-        assert_eq!(h, 480);
+        assert_eq!(h, 496);
         assert_eq!(old_pos.1 + old_size.1 as i32, y + h as i32);
 
         // Scaled HiDPI restore back to compact height also preserves bottom edge
