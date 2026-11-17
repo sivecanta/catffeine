@@ -352,11 +352,36 @@ fn set_cat_visible(app: AppHandle, window: WebviewWindow, visible: bool) -> AppS
 
 #[tauri::command]
 fn set_tracked_agent(app: AppHandle, agent: TrackedAgent) -> AppStateSnapshot {
-    let busy = is_tracked_agent_busy(agent);
-    sync_and_broadcast_state(&app, |inner| {
+    let snapshot = sync_and_broadcast_state(&app, |inner| {
+        if inner.tracked_agent != agent {
+            inner.tracked_agent_busy = false;
+        }
         inner.tracked_agent = agent;
-        inner.tracked_agent_busy = busy;
-    })
+    });
+
+    if agent != TrackedAgent::None {
+        let handle = app.clone();
+        tauri::async_runtime::spawn(async move {
+            let busy = tokio::task::spawn_blocking(move || is_tracked_agent_busy(agent))
+                .await
+                .unwrap_or(false);
+            let maybe_snapshot = {
+                let state = handle.state::<AppState>();
+                let mut inner = state.0.lock().expect("AppState mutex poisoned");
+                if inner.tracked_agent == agent && inner.tracked_agent_busy != busy {
+                    inner.set_tracked_agent_busy(busy);
+                    Some(inner.reconcile())
+                } else {
+                    None
+                }
+            };
+            if let Some(updated) = maybe_snapshot {
+                let _ = handle.emit("catffeine://state-changed", &updated);
+            }
+        });
+    }
+
+    snapshot
 }
 
 #[tauri::command]
@@ -519,7 +544,7 @@ fn setup_system_tray(app: &AppHandle) -> Result<(), Box<dyn std::error::Error>> 
 
 fn spawn_timer_worker(app: AppHandle) {
     tauri::async_runtime::spawn(async move {
-        let mut interval = tokio::time::interval(Duration::from_secs(1));
+        let mut interval = tokio::time::interval(Duration::from_secs(2));
         loop {
             interval.tick().await;
             let tracked = {
@@ -529,7 +554,9 @@ fn spawn_timer_worker(app: AppHandle) {
             };
 
             let next_busy = if tracked != TrackedAgent::None {
-                is_tracked_agent_busy(tracked)
+                tokio::task::spawn_blocking(move || is_tracked_agent_busy(tracked))
+                    .await
+                    .unwrap_or(false)
             } else {
                 false
             };

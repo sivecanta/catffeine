@@ -85,8 +85,7 @@ function renderOpacityControls(): void {
   catOpacitySlider.value = String(catOpacity);
   catOpacityValue.textContent = `${catOpacity}%`;
   const alpha = String(catOpacity / 100);
-  catHitbox.style.opacity = alpha;
-  statusBanner.style.opacity = alpha;
+  appRoot.style.setProperty("--cat-opacity", alpha);
 }
 
 renderSoundControls();
@@ -292,6 +291,7 @@ trackMenu.addEventListener("click", async (event) => {
   const clicked = btn.dataset.track as TrackedAgent;
   const agent: TrackedAgent = currentState.tracked_agent === clicked ? "none" : clicked;
   renderState(await invoke<AppStateSnapshot>("set_tracked_agent", { agent }));
+  (document.activeElement as HTMLElement | null)?.blur();
 });
 
 // Quick "Pin Here" button locks the cat at its current custom coordinates

@@ -76,6 +76,9 @@ body {
 
 /* Pixel-styled Status Pill */
 .status-banner {
+  position: relative;
+  z-index: 50;
+  opacity: var(--cat-opacity, 1);
   display: inline-flex;
   align-items: center;
   gap: 7px;
@@ -90,6 +93,11 @@ body {
   box-shadow: 0 3px 0 rgba(0, 0, 0, 0.45);
   margin-bottom: 4px;
   pointer-events: auto;
+}
+
+.status-banner:hover,
+.status-banner:focus-within {
+  opacity: 1;
 }
 
 .quick-pin-btn {
@@ -242,6 +250,8 @@ body {
 /* Interactive Pixel Cat Hitbox (32x30 @ 5x = 160x150) */
 .cat-hitbox {
   position: relative;
+  z-index: 10;
+  opacity: var(--cat-opacity, 1);
   width: 160px;
   height: 150px;
   cursor: pointer;

@@ -22,6 +22,7 @@
 //!   processes — while ignoring background idle telemetry (`logs_2.sqlite` / `models_cache.json`).
 
 use std::path::{Path, PathBuf};
+use std::sync::OnceLock;
 use std::time::{Duration, SystemTime};
 
 use serde::{Deserialize, Serialize};
@@ -254,37 +255,40 @@ pub fn is_tracked_agent_busy(agent: TrackedAgent) -> bool {
     }
 }
 
-/// Returns candidate home directories, including both native OS (`USERPROFILE` / `HOME`)
+/// Returns cached candidate home directories, including both native OS (`USERPROFILE` / `HOME`)
 /// and WSL home directories (`\\wsl.localhost\<distro>\home\<user>`) when running on Windows.
-fn candidate_home_dirs() -> Vec<PathBuf> {
-    let mut homes = Vec::new();
+fn candidate_home_dirs() -> &'static [PathBuf] {
+    static CANDIDATE_HOMES: OnceLock<Vec<PathBuf>> = OnceLock::new();
+    CANDIDATE_HOMES.get_or_init(|| {
+        let mut homes = Vec::new();
 
-    if let Some(up) = std::env::var_os("USERPROFILE") {
-        homes.push(PathBuf::from(up));
-    }
-    if let Some(h) = std::env::var_os("HOME") {
-        let p = PathBuf::from(h);
-        if !homes.contains(&p) {
-            homes.push(p);
+        if let Some(up) = std::env::var_os("USERPROFILE") {
+            homes.push(PathBuf::from(up));
         }
-    }
-
-    #[cfg(target_os = "windows")]
-    if let Some(user) = homes
-        .first()
-        .and_then(|p| p.file_name())
-        .and_then(|n| n.to_str())
-        .map(str::to_string)
-    {
-        for distro in ["Ubuntu", "Ubuntu-24.04", "Ubuntu-22.04", "Debian"] {
-            let wsl_home = PathBuf::from(format!(r"\\wsl.localhost\{distro}\home\{user}"));
-            if wsl_home.exists() && !homes.contains(&wsl_home) {
-                homes.push(wsl_home);
+        if let Some(h) = std::env::var_os("HOME") {
+            let p = PathBuf::from(h);
+            if !homes.contains(&p) {
+                homes.push(p);
             }
         }
-    }
 
-    homes
+        #[cfg(target_os = "windows")]
+        if let Some(user) = homes
+            .first()
+            .and_then(|p| p.file_name())
+            .and_then(|n| n.to_str())
+            .map(str::to_string)
+        {
+            for distro in ["Ubuntu", "Ubuntu-24.04", "Ubuntu-22.04", "Debian"] {
+                let wsl_home = PathBuf::from(format!(r"\\wsl.localhost\{distro}\home\{user}"));
+                if wsl_home.exists() && !homes.contains(&wsl_home) {
+                    homes.push(wsl_home);
+                }
+            }
+        }
+
+        homes
+    })
 }
 
 fn read_tail_text(path: &Path, max_bytes: u64) -> Option<String> {
@@ -359,7 +363,7 @@ fn collect_recent_files_under(
     max_age: Duration,
     out: &mut Vec<(PathBuf, Duration)>,
 ) {
-    if max_depth == 0 || !dir.exists() {
+    if max_depth == 0 {
         return;
     }
     let Ok(entries) = std::fs::read_dir(dir) else {
