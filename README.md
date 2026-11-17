@@ -52,9 +52,8 @@ npx tauri build
     - `Pin Here (Lock)`: Lock the cat at its current custom screen coordinates (also available via the one-click **`Pin Here`** badge while in Free Drag mode).
     - `Bottom Right` / `Bottom Left`: Snap above the taskbar/dock corners.
   - **Sound**: `Mute Meow` toggle and `Vol` (`0%–100%`) slider.
-  - **Always on Top**: Keep the cat floating above all windows (enabled by default).
+  - **Appearance**: `Opacity` (`20%–100%`) transparency slider, `Always on Top` toggle (enabled by default), and `Hide / Show Cat` (hides into the Windows System Tray / macOS Menu Bar; left-click the tray icon or click `Show Cat` to unhide).
   - **Launch on Startup**: Automatically start Catffeine when you log into Windows, macOS, or Linux.
-  - **Hide / Show Cat**: Hide the desktop window into the Windows System Tray / macOS Menu Bar. Left-click the tray/menu-bar cat icon (or click `Show Cat`) to unhide anytime.
 
 ---
 
