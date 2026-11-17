@@ -5,9 +5,7 @@
 //! the desktop taskbar/dock.
 
 use serde::{Deserialize, Serialize};
-use tauri::{PhysicalPosition, WebviewWindow};
-#[cfg(not(target_os = "windows"))]
-use tauri::{PhysicalSize, Size};
+use tauri::{PhysicalPosition, PhysicalSize, Size, WebviewWindow};
 
 /// Compact window height (logical px) for cat + status banner when context menu is closed.
 pub const COMPACT_WINDOW_HEIGHT_LOGICAL: f64 = 196.0;
@@ -145,39 +143,12 @@ pub fn set_window_menu_open_bounds(window: &WebviewWindow, menu_open: bool) -> R
         return Ok(());
     }
 
-    #[cfg(target_os = "windows")]
-    {
-        use windows_sys::Win32::UI::WindowsAndMessaging::{
-            SetWindowPos, SWP_NOACTIVATE, SWP_NOZORDER,
-        };
-        let hwnd = window
-            .hwnd()
-            .map_err(|e| format!("Failed to get HWND: {e}"))?;
-        let ok = unsafe {
-            SetWindowPos(
-                hwnd.0,
-                std::ptr::null_mut(),
-                x,
-                y,
-                w as i32,
-                h as i32,
-                SWP_NOZORDER | SWP_NOACTIVATE,
-            )
-        };
-        if ok == 0 {
-            return Err("SetWindowPos failed while resizing context menu bounds".to_string());
-        }
-    }
-
-    #[cfg(not(target_os = "windows"))]
-    {
-        window
-            .set_size(Size::Physical(PhysicalSize::new(w, h)))
-            .map_err(|e| format!("Failed to set window size: {e}"))?;
-        window
-            .set_position(PhysicalPosition::new(x, y))
-            .map_err(|e| format!("Failed to set window position: {e}"))?;
-    }
+    window
+        .set_size(Size::Physical(PhysicalSize::new(w, h)))
+        .map_err(|e| format!("Failed to set window size: {e}"))?;
+    window
+        .set_position(PhysicalPosition::new(x, y))
+        .map_err(|e| format!("Failed to set window position: {e}"))?;
 
     Ok(())
 }
