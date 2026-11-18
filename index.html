@@ -208,16 +208,6 @@
             </g>
           </g>
 
-          <!-- Pixel Paws -->
-          <g class="cat-paw paw-left">
-            <path class="px-outline" d="M9 25h5v3H9z" />
-            <path class="px-belly" d="M10 26h3v1h-3z" />
-          </g>
-          <g class="cat-paw paw-right">
-            <path class="px-outline" d="M18 25h5v3h-5z" />
-            <path class="px-belly" d="M19 26h3v1h-3z" />
-          </g>
-
           <!-- Pixel Coffee Mug (Awake & Working states) -->
           <g class="coffee-mug">
             <path
@@ -246,16 +236,38 @@
             <path class="px-laptop-logo" d="M15 23h2v2h-2z" />
           </g>
 
+          <!-- Pixel Paws (layered over laptop edge while typing) -->
+          <g class="cat-paw paw-left">
+            <path class="px-outline" d="M9 25h5v3H9z" />
+            <path class="px-belly" d="M10 26h3v1h-3z" />
+          </g>
+          <g class="cat-paw paw-right">
+            <path class="px-outline" d="M18 25h5v3h-5z" />
+            <path class="px-belly" d="M19 26h3v1h-3z" />
+          </g>
+
           <!-- Pixel Floating Zzz (Sleeping state) -->
           <g class="layer-zzz">
-            <path
-              class="px-zzz zzz-1"
-              d="M25 8h3v1h-3z M26 9h1v1h-1z M25 10h3v1h-3z"
-            />
-            <path
-              class="px-zzz zzz-2"
-              d="M27 2h4v1h-4z M29 3h1v1h-1z M28 4h1v1h-1z M27 5h4v1h-4z"
-            />
+            <g class="zzz-1">
+              <path
+                class="px-outline"
+                d="M25 5h5v3h-5z M26 7h3v1h-3z M25 8h5v2h-5z"
+              />
+              <path
+                class="px-zzz"
+                d="M26 6h3v1h-3z M27 7h1v1h-1z M26 8h3v1h-3z"
+              />
+            </g>
+            <g class="zzz-2">
+              <path
+                class="px-outline"
+                d="M26 0h6v2h-6z M28 2h3v1h-3z M27 3h3v1h-3z M26 4h6v2h-6z"
+              />
+              <path
+                class="px-zzz"
+                d="M27 1h4v1h-4z M29 2h1v1h-1z M28 3h1v1h-1z M27 4h4v1h-4z"
+              />
+            </g>
           </g>
         </svg>
       </div>

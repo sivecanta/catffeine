@@ -28,6 +28,7 @@ const meowBubble = document.getElementById("meow-bubble") as HTMLElement;
 const statusBanner = document.getElementById("status-banner") as HTMLElement;
 const statusLabel = document.getElementById("status-label") as HTMLElement;
 const timerBadge = document.getElementById("timer-badge") as HTMLElement;
+const trackWrapper = document.getElementById("track-wrapper") as HTMLElement;
 const trackBtn = document.getElementById("track-btn") as HTMLButtonElement;
 const trackMenu = document.getElementById("track-menu") as HTMLElement;
 const quickPinBtn = document.getElementById("quick-pin-btn") as HTMLButtonElement;
@@ -215,16 +216,22 @@ function renderState(snapshot: AppStateSnapshot): void {
   menuLaunchOnStart.classList.toggle("active", snapshot.launch_on_start);
 }
 
-function setMenuOpen(open: boolean): void {
+function setTrackMenuOpen(open: boolean): void {
+  trackWrapper.classList.toggle("open", open);
+}
+
+async function setMenuOpen(open: boolean): Promise<void> {
   if (menuOpen === open) return;
   menuOpen = open;
   if (open) {
-    void invoke("set_context_menu_open", { open: true }).catch(() => {});
+    setTrackMenuOpen(false);
+    await invoke("set_context_menu_open", { open: true }).catch(() => {});
+    if (!menuOpen) return;
     contextMenu.classList.remove("hidden");
     void getCurrentWindow().setFocus().catch(() => {});
   } else {
     contextMenu.classList.add("hidden");
-    void invoke("set_context_menu_open", { open: false }).catch(() => {});
+    await invoke("set_context_menu_open", { open: false }).catch(() => {});
   }
 }
 
@@ -250,6 +257,10 @@ catHitbox.addEventListener("mousedown", (event) => {
 
 window.addEventListener("mousemove", async (event) => {
   if (!pointerDownPos || dragStarted) return;
+  if ((event.buttons & 1) === 0) {
+    pointerDownPos = null;
+    return;
+  }
   const moved =
     Math.abs(event.screenX - pointerDownPos.x) >= 4 ||
     Math.abs(event.screenY - pointerDownPos.y) >= 4;
@@ -274,11 +285,15 @@ catHitbox.addEventListener("mouseup", async (event) => {
 
   if (!moved && !dragStarted) {
     if (menuOpen) {
-      setMenuOpen(false);
+      await setMenuOpen(false);
     } else {
       await toggleAwakePolicy();
     }
   }
+});
+
+window.addEventListener("mouseup", () => {
+  pointerDownPos = null;
 });
 
 catHitbox.addEventListener("keydown", async (event) => {
@@ -288,12 +303,26 @@ catHitbox.addEventListener("keydown", async (event) => {
   }
 });
 
-// Single-select Track Agent menu (clicking active agent unselects it)
+// Hover / click Track Agent popover + single-select handling (clicking active agent unselects it)
+trackWrapper.addEventListener("mouseenter", () => {
+  if (!menuOpen) setTrackMenuOpen(true);
+});
+
+trackWrapper.addEventListener("mouseleave", () => {
+  setTrackMenuOpen(false);
+});
+
+trackBtn.addEventListener("click", (event) => {
+  event.stopPropagation();
+  setTrackMenuOpen(!trackWrapper.classList.contains("open"));
+});
+
 trackMenu.addEventListener("click", async (event) => {
   const btn = event.target instanceof Element ? event.target.closest<HTMLButtonElement>("[data-track]") : null;
   if (!btn || !btn.dataset.track) return;
   const clicked = btn.dataset.track as TrackedAgent;
   const agent: TrackedAgent = currentState.tracked_agent === clicked ? "none" : clicked;
+  setTrackMenuOpen(false);
   renderState(await invoke<AppStateSnapshot>("set_tracked_agent", { agent }));
   (document.activeElement as HTMLElement | null)?.blur();
 });
@@ -315,25 +344,34 @@ unhideBtn.addEventListener("click", async () => {
 // Right-click & Escape context menu handling
 window.addEventListener("contextmenu", (event) => {
   event.preventDefault();
+  setTrackMenuOpen(false);
   const targetInUi =
     event.target instanceof Element &&
     Boolean(event.target.closest("#cat-hitbox, #status-banner, #unhide-btn, #context-menu"));
   if (menuOpen || targetInUi) {
-    setMenuOpen(!menuOpen);
+    void setMenuOpen(!menuOpen);
   }
 });
 
 window.addEventListener("keydown", (event) => {
-  if (event.key === "Escape") setMenuOpen(false);
+  if (event.key === "Escape") {
+    setTrackMenuOpen(false);
+    void setMenuOpen(false);
+  }
 });
 
 window.addEventListener("blur", () => {
-  setMenuOpen(false);
+  setTrackMenuOpen(false);
+  void setMenuOpen(false);
 });
 
 window.addEventListener("mousedown", (event) => {
-  if (menuOpen && !(event.target instanceof Element && event.target.closest("#context-menu"))) {
-    setMenuOpen(false);
+  const targetEl = event.target instanceof Element ? event.target : null;
+  if (!targetEl?.closest("#track-wrapper")) {
+    setTrackMenuOpen(false);
+  }
+  if (menuOpen && !targetEl?.closest("#context-menu")) {
+    void setMenuOpen(false);
   }
 });
 
@@ -374,7 +412,7 @@ contextMenu.addEventListener("click", async (event) => {
     return;
   }
 
-  setMenuOpen(false);
+  await setMenuOpen(false);
 
   if (btn.dataset.policy) {
     const wasSleeping = currentState.cat_state === "sleeping";
@@ -417,7 +455,10 @@ contextMenu.addEventListener("click", async (event) => {
 async function init(): Promise<void> {
   try {
     await getCurrentWindow().onFocusChanged(({ payload: focused }) => {
-      if (!focused) setMenuOpen(false);
+      if (!focused) {
+        setTrackMenuOpen(false);
+        void setMenuOpen(false);
+      }
     });
     await listen<AppStateSnapshot>("catffeine://state-changed", (event) => {
       renderState(event.payload);

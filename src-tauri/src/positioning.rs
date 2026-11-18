@@ -7,8 +7,10 @@
 use serde::{Deserialize, Serialize};
 use tauri::{PhysicalPosition, PhysicalSize, Size, WebviewWindow};
 
+/// Compact window width (logical px) for cat + single-line status banner.
+pub const COMPACT_WINDOW_WIDTH_LOGICAL: f64 = 320.0;
 /// Compact window height (logical px) for cat + status banner when context menu is closed.
-pub const COMPACT_WINDOW_HEIGHT_LOGICAL: f64 = 204.0;
+pub const COMPACT_WINDOW_HEIGHT_LOGICAL: f64 = 232.0;
 /// Expanded window height (logical px) to accommodate the open context menu.
 pub const MENU_WINDOW_HEIGHT_LOGICAL: f64 = 512.0;
 
@@ -102,15 +104,20 @@ pub fn apply_dock_position(window: &WebviewWindow, position: DockPosition) -> Re
 }
 
 /// Computes a bottom-anchored `(x, y, width, height)` in physical pixels when resizing vertically
-/// so the bottom edge (`y + height`) stays fixed on screen.
+/// so the bottom edge (`y + height`) stays fixed on screen (clamped to `min_y` at the monitor top).
 pub fn compute_bottom_anchored_rect(
     old_pos: (i32, i32),
     old_size: (u32, u32),
     target_logical_height: f64,
     scale: f64,
+    min_y: Option<i32>,
 ) -> (i32, i32, u32, u32) {
     let new_h = (target_logical_height * scale).round() as u32;
-    let new_y = old_pos.1 + (old_size.1 as i32) - (new_h as i32);
+    let unclamped_y = old_pos.1 + (old_size.1 as i32) - (new_h as i32);
+    let new_y = match min_y {
+        Some(top) => unclamped_y.max(top),
+        None => unclamped_y,
+    };
     (old_pos.0, new_y, old_size.0, new_h)
 }
 
@@ -125,6 +132,11 @@ pub fn set_window_menu_open_bounds(window: &WebviewWindow, menu_open: bool) -> R
     let scale = window
         .scale_factor()
         .map_err(|e| format!("Failed to query window scale factor: {e}"))?;
+    let min_y = window
+        .current_monitor()
+        .ok()
+        .flatten()
+        .map(|m| m.position().y);
 
     let target_logical_height = if menu_open {
         MENU_WINDOW_HEIGHT_LOGICAL
@@ -137,6 +149,7 @@ pub fn set_window_menu_open_bounds(window: &WebviewWindow, menu_open: bool) -> R
         (old_size.width, old_size.height),
         target_logical_height,
         scale,
+        min_y,
     );
 
     if old_size.height == h {
@@ -197,21 +210,42 @@ mod tests {
 
     #[test]
     fn bottom_anchored_rect_preserves_bottom_edge_across_menu_toggle() {
-        let old_pos = (1604, 842);
-        let old_size = (320, 204);
-        let (x, y, w, h) =
-            compute_bottom_anchored_rect(old_pos, old_size, MENU_WINDOW_HEIGHT_LOGICAL, 1.0);
+        let old_pos = (1604, 800);
+        let old_size = (320, 232);
+        let (x, y, w, h) = compute_bottom_anchored_rect(
+            old_pos,
+            old_size,
+            MENU_WINDOW_HEIGHT_LOGICAL,
+            1.0,
+            Some(0),
+        );
         assert_eq!(x, old_pos.0);
         assert_eq!(w, old_size.0);
         assert_eq!(h, 512);
         assert_eq!(old_pos.1 + old_size.1 as i32, y + h as i32);
 
         // Scaled HiDPI restore back to compact height also preserves bottom edge
-        let (x2, y2, w2, h2) =
-            compute_bottom_anchored_rect((x, y * 2), (w * 2, h * 2), COMPACT_WINDOW_HEIGHT_LOGICAL, 2.0);
-        assert_eq!(h2, 408);
+        let (x2, y2, w2, h2) = compute_bottom_anchored_rect(
+            (x, y * 2),
+            (w * 2, h * 2),
+            COMPACT_WINDOW_HEIGHT_LOGICAL,
+            2.0,
+            Some(0),
+        );
+        assert_eq!(h2, 464);
         assert_eq!((y * 2) + (h * 2) as i32, y2 + h2 as i32);
         assert_eq!(x2, x);
         assert_eq!(w2, w * 2);
+
+        // Clamps to monitor top edge when opening the menu near the top of the screen
+        let (_cx, cy, _cw, ch) = compute_bottom_anchored_rect(
+            (100, 50),
+            (320, 232),
+            MENU_WINDOW_HEIGHT_LOGICAL,
+            1.0,
+            Some(0),
+        );
+        assert_eq!(cy, 0);
+        assert_eq!(ch, 512);
     }
 }

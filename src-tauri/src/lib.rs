@@ -272,6 +272,12 @@ pub fn apply_cat_visible_and_sync(
     window: Option<&WebviewWindow>,
     visible: bool,
 ) -> AppStateSnapshot {
+    let always_on_top = {
+        let state = app.state::<AppState>();
+        let inner = state.0.lock().expect("AppState mutex poisoned");
+        inner.always_on_top
+    };
+
     let win = window
         .cloned()
         .or_else(|| app.get_webview_window("main"));
@@ -279,7 +285,8 @@ pub fn apply_cat_visible_and_sync(
     if let Some(win) = win {
         if visible {
             let _ = win.show();
-            let _ = win.set_always_on_top(true);
+            let _ = set_window_menu_open_bounds(&win, false);
+            let _ = win.set_always_on_top(always_on_top);
             let _ = win.set_focus();
         } else {
             // On Windows/macOS where the system tray icon is present, hide the window into the tray;
@@ -291,9 +298,6 @@ pub fn apply_cat_visible_and_sync(
 
     sync_and_broadcast_state(app, |inner| {
         inner.cat_visible = visible;
-        if visible {
-            inner.always_on_top = true;
-        }
     })
 }
 
@@ -564,21 +568,32 @@ fn spawn_timer_worker(app: AppHandle) {
             let maybe_events = {
                 let state = app.state::<AppState>();
                 let mut inner = state.0.lock().expect("AppState mutex poisoned");
-                let prev_busy = inner.tracked_agent_busy;
-                let busy_changed = prev_busy != next_busy;
-                if busy_changed {
-                    inner.set_tracked_agent_busy(next_busy);
-                }
-                let finished_agent = if prev_busy && !next_busy && inner.tracked_agent != TrackedAgent::None {
-                    Some(inner.tracked_agent.display_name().to_string())
+                if inner.tracked_agent != tracked {
+                    if inner.policy_expires_at.is_some() {
+                        Some((inner.reconcile(), None))
+                    } else {
+                        None
+                    }
                 } else {
-                    None
-                };
+                    let prev_busy = inner.tracked_agent_busy;
+                    let busy_changed = prev_busy != next_busy;
+                    if busy_changed {
+                        inner.set_tracked_agent_busy(next_busy);
+                    }
+                    let finished_agent = if prev_busy
+                        && !next_busy
+                        && inner.tracked_agent != TrackedAgent::None
+                    {
+                        Some(inner.tracked_agent.display_name().to_string())
+                    } else {
+                        None
+                    };
 
-                if busy_changed || inner.policy_expires_at.is_some() {
-                    Some((inner.reconcile(), finished_agent))
-                } else {
-                    None
+                    if busy_changed || inner.policy_expires_at.is_some() {
+                        Some((inner.reconcile(), finished_agent))
+                    } else {
+                        None
+                    }
                 }
             };
 
