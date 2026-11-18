@@ -7,9 +7,9 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: "Pre-release tag (e.g. v0.1.2)"
+        description: "Pre-release tag (e.g. v0.1.3)"
         required: true
-        default: "v0.1.2"
+        default: "v0.1.3"
 
 permissions:
   contents: write
@@ -65,7 +65,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           tagName: ${{ github.ref_type == 'tag' && github.ref_name || inputs.tag }}
-          releaseName: "Catffeine ${{ github.ref_type == 'tag' && github.ref_name || inputs.tag }} — Appearance Controls, Compact Window & Snappier Agent Tracking (Pre-release)"
+          releaseName: "Catffeine ${{ github.ref_type == 'tag' && github.ref_name || inputs.tag }} — HiDPI Laptop UI Fixes, SVG Polish & State Sync (Pre-release)"
           releaseBody: |
             A cozy, lightweight pixel-art desktop companion cat that lives on your desktop, Windows System Tray, or macOS Menu Bar — keeping your computer awake indefinitely, on a timer (`30m` / `1h` / `2h`), **until your tracked AI agent finishes**, or automatically while AI coding agents (**Claude**, **Codex**, **Antigravity**, **Cursor**) and CLI tasks are running.
 
@@ -73,13 +73,13 @@ jobs:
 
             | OS | Architecture | Download Link | Format / Notes |
             | :--- | :--- | :--- | :--- |
-            | **Windows 10 / 11** | `x86_64` (64-bit) | [**`catffeine.exe`**](https://github.com/sivecanta/catffeine/releases/download/v0.1.2/catffeine.exe) | Standalone portable executable (double-click to run) |
-            | **Windows 10 / 11 (Installer)** | `x86_64` (64-bit) | [**`Catffeine_0.1.2_x64-setup.exe`**](https://github.com/sivecanta/catffeine/releases/download/v0.1.2/Catffeine_0.1.2_x64-setup.exe) | Windows NSIS installer |
-            | **macOS (Apple Silicon)** | `aarch64` (`M1`–`M4`) | [**`Catffeine_0.1.2_aarch64.dmg`**](https://github.com/sivecanta/catffeine/releases/download/v0.1.2/Catffeine_0.1.2_aarch64.dmg) | macOS Disk Image installer |
-            | **macOS (Intel)** | `x86_64` | [**`Catffeine_0.1.2_x64.dmg`**](https://github.com/sivecanta/catffeine/releases/download/v0.1.2/Catffeine_0.1.2_x64.dmg) | macOS Disk Image installer |
-            | **Linux (Ubuntu / Debian)** | `x86_64` (`amd64`) | [**`Catffeine_0.1.2_amd64.deb`**](https://github.com/sivecanta/catffeine/releases/download/v0.1.2/Catffeine_0.1.2_amd64.deb) | Debian package (`sudo apt install ./Catffeine_0.1.2_amd64.deb`) |
-            | **Linux (Fedora / RHEL)** | `x86_64` | [**`Catffeine-0.1.2-1.x86_64.rpm`**](https://github.com/sivecanta/catffeine/releases/download/v0.1.2/Catffeine-0.1.2-1.x86_64.rpm) | RPM package (`sudo dnf install ./Catffeine-0.1.2-1.x86_64.rpm`) |
-            | **Linux (Standalone)** | `x86_64` | [**`catffeine-linux-x86_64`**](https://github.com/sivecanta/catffeine/releases/download/v0.1.2/catffeine-linux-x86_64) | Standalone binary (`chmod +x catffeine-linux-x86_64 && ./catffeine-linux-x86_64`) |
+            | **Windows 10 / 11** | `x86_64` (64-bit) | [**`catffeine.exe`**](https://github.com/sivecanta/catffeine/releases/download/v0.1.3/catffeine.exe) | Standalone portable executable (double-click to run) |
+            | **Windows 10 / 11 (Installer)** | `x86_64` (64-bit) | [**`Catffeine_0.1.3_x64-setup.exe`**](https://github.com/sivecanta/catffeine/releases/download/v0.1.3/Catffeine_0.1.3_x64-setup.exe) | Windows NSIS installer |
+            | **macOS (Apple Silicon)** | `aarch64` (`M1`–`M4`) | [**`Catffeine_0.1.3_aarch64.dmg`**](https://github.com/sivecanta/catffeine/releases/download/v0.1.3/Catffeine_0.1.3_aarch64.dmg) | macOS Disk Image installer |
+            | **macOS (Intel)** | `x86_64` | [**`Catffeine_0.1.3_x64.dmg`**](https://github.com/sivecanta/catffeine/releases/download/v0.1.3/Catffeine_0.1.3_x64.dmg) | macOS Disk Image installer |
+            | **Linux (Ubuntu / Debian)** | `x86_64` (`amd64`) | [**`Catffeine_0.1.3_amd64.deb`**](https://github.com/sivecanta/catffeine/releases/download/v0.1.3/Catffeine_0.1.3_amd64.deb) | Debian package (`sudo apt install ./Catffeine_0.1.3_amd64.deb`) |
+            | **Linux (Fedora / RHEL)** | `x86_64` | [**`Catffeine-0.1.3-1.x86_64.rpm`**](https://github.com/sivecanta/catffeine/releases/download/v0.1.3/Catffeine-0.1.3-1.x86_64.rpm) | RPM package (`sudo dnf install ./Catffeine-0.1.3-1.x86_64.rpm`) |
+            | **Linux (Standalone)** | `x86_64` | [**`catffeine-linux-x86_64`**](https://github.com/sivecanta/catffeine/releases/download/v0.1.3/catffeine-linux-x86_64) | Standalone binary (`chmod +x catffeine-linux-x86_64 && ./catffeine-linux-x86_64`) |
 
             *(All attached files are also listed under **Assets** at the bottom of this release.)*
 
@@ -87,7 +87,18 @@ jobs:
 
             ---
 
-            ### 🚀 What's New in `v0.1.2`
+            ### 🚀 What's New in `v0.1.3`
+
+            - **🖼️ HiDPI Laptop Banner Clearance (`320×232`)**:
+              - Expanded compact window height from `204px` to `232px` and tightened `.status-banner` spacing (`48px` top clearance) so the status pill and `Track` button never clip at the top on laptop displays.
+            - **🐾 Pixel-Art SVG Layering & Sleeping/Working Polish**:
+              - Fixed `Zzz` right-ear overlap with dark pixel outlines for contrast, toned down sleeping head/paw SVG transforms to `1` pixel unit (`5px`), and layered typing paws in front of the mini-laptop in `Working` mode.
+            - **🎯 `Track` Popover & Speech Bubble Fixes**:
+              - `Track` menu now toggles cleanly on click and closes immediately when selecting an agent; centered `.meow-bubble` (`white-space: nowrap`) so long completion messages never wrap over the cat.
+            - **🔒 Window & Timer State Sync Fixes**:
+              - Awaited menu resize before docking, clamped expanded context menu to the monitor top edge (`min_y`), preserved user `Always on Top` state across show/hide, and guarded `spawn_timer_worker` against stale mid-flight agent polls.
+
+            ### 🆕 Included from `v0.1.2`
 
             - **🎨 Appearance Section & Cat Opacity Slider (`20%–100%`)**:
               - Right-click menu now groups **Opacity** (`20%–100%` slider with live preview and `localStorage` persistence), **Always on Top**, and **Hide Cat** under a dedicated **Appearance** section.
